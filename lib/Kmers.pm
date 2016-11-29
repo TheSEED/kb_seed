@@ -68,10 +68,13 @@ sub new {
     my $FRIDB;
     my $setIDB;
 
+    my $fig;
+
     if ($_[0] =~ /^-/)
     {
 	my %args = @_;
 
+	$fig = $args{-fig};
 	$FRIDB = $args{-frIdb};
 	$setIDB = $args{-setIdb};
 	my $table = $args{-table};
@@ -88,7 +91,7 @@ sub new {
 	#
 
 	my $ffdir = dirname($FRIDB);
-	$figfams->{ffs} = FFs->new($ffdir);
+	$figfams->{ffs} = FFs->new($ffdir, $fig);
 
 	$figfams->{dir} = $ffdir;
 
@@ -179,7 +182,9 @@ sub new {
 
     $figfams->{friH}  = \%fr_hash;
     $figfams->{setiH} = \%set_hash;
-    $figfams->{fig} = new FIG if $have_fig;
+
+    $fig = FIG->new if $have_fig && !$fig;
+    $figfams->{fig} = $fig if $fig;
 
 
     bless $figfams,$class;

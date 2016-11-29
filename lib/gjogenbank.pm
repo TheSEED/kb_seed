@@ -107,39 +107,39 @@ package gjogenbank;
 #  locus_tag is the most consistently present.  For proteins, protein_id is
 #  is usually the accession number for the corresponding protein database entry.
 #
-#   $id  = ftr_id( $ftr,  @types )  #  The first id drawn from an ordered list
-#   $id  = ftr_id( $ftr, \@types )  #      of type preferences, each defined by
-#                                   #    1. a feature qualifier name,
-#                                   #    2. "gi", or
-#                                   #    3. "xref:$db", where $db is a database id
-#                                   #  It is up to the user to handle multiword ids.
+#     $id  = ftr_id( $ftr,  @types )  #  The first id drawn from an ordered list
+#     $id  = ftr_id( $ftr, \@types )  #      of type preferences, each defined by
+#                                     #    1. a feature qualifier name,
+#                                     #    2. "gi", or
+#                                     #    3. "xref:$db", where $db is a database id
+#                                     #  It is up to the user to handle multiword ids.
 #
 #  Predefined lists:
 #
-#   $id  = ftr_id( $ftr )           #  protein_id, locus_tag, gene or gi
-#   $id  = ftr_locus_tag( $ftr )    #  locus_tag, protein_id, gene or gi
-#   $id  = ftr_old_tag( $ftr )      #  old_locus_tag, locus_tag, protein_id, gene or gi
-#   $id  = ftr_gene_or_id( $ftr )   #  gene, locus_tag, protein_id or gi
-#   $id  = ftr_gi_or_id( $ftr )     #  gi, protein_id, locus_tag or gene
+#     $id  = ftr_id( $ftr )           #  protein_id, locus_tag, gene or gi
+#     $id  = ftr_locus_tag( $ftr )    #  locus_tag, protein_id, gene or gi
+#     $id  = ftr_old_tag( $ftr )      #  old_locus_tag, locus_tag, protein_id, gene or gi
+#     $id  = ftr_gene_or_id( $ftr )   #  gene, locus_tag, protein_id or gi
+#     $id  = ftr_gi_or_id( $ftr )     #  gi, protein_id, locus_tag or gene
 #
 #  Get the feature id of a specific type, or return undef:
 #
-#   $gi  = ftr_gi( $ftr )           #  gi number or undef
-#   $id  = ftr_xref( $ftr, $type )  #  db cross reference of $type
-#   @ids = ftr_xref( $ftr, $type )  #  db cross references of $type
+#     $gi  = ftr_gi( $ftr )           #  gi number or undef
+#     $id  = ftr_xref( $ftr, $type )  #  db cross reference of $type
+#     @ids = ftr_xref( $ftr, $type )  #  db cross references of $type
 #
 #  Feature ids in old interface:
 #
-#   $id  = CDS_id( $ftr )           #  protein_id, locus_tag, gene or gi
-#   $id  = CDS_locus_tag( $ftr )    #  locus_tag, protein_id, gene or gi
-#   $id  = CDS_gi_or_id( $ftr )     #  gi, protein_id, locus_tag or gene
-#   $gi  = CDS_gi( $ftr )           #  gi number or undef
+#     $id  = CDS_id( $ftr )           #  protein_id, locus_tag, gene or gi
+#     $id  = CDS_locus_tag( $ftr )    #  locus_tag, protein_id, gene or gi
+#     $id  = CDS_gi_or_id( $ftr )     #  gi, protein_id, locus_tag or gene
+#     $gi  = CDS_gi( $ftr )           #  gi number or undef
 #
 #-------------------------------------------------------------------------------
 #  Feature location (as GenBank format location string; see conversion
 #  conversion functions below).
 #
-#    $ftr_location = location( $ftr )      #  Returns empty string on failure.
+#     $ftr_location = location( $ftr )      #  Returns empty string on failure.
 #
 #  Identify features with partial 5' or 3' ends.
 #
@@ -150,7 +150,7 @@ package gjogenbank;
 #
 #     $gene              = gene( $ftr )
 #     @gene_and_synonyms = gene( $ftr )
-
+#
 #     $product = product( $ftr )
 #
 #     @EC_number = EC_number( $ftr )
@@ -536,16 +536,17 @@ sub parse_one_genbank_entry
             elsif ( $tag eq 'ORGANISM' )
             {
                 my $org = shift @value;
-		#
-		# Long genome names may split into additional lines in the value; we need
-		# to bring them into the org name. We will bring in values until we get
-		# one with a ; since that begins the taxonomy.
+                #
+                #  Long genome names may split into additional lines in the value; we need
+                #  to bring them into the org name. We will bring in values until we get
+                #  one with a ; since that begins the taxonomy.
+                #
                 $entry{ ORGANISM } = $org;
                 while (@value && $value[0] !~ /\.$/ && $value[0] !~ /;/)
-		{
-		    my $ent = shift @value;
-		    $entry { ORGANISM } .= " $ent";
-		}
+                {
+                    my $ent = shift @value;
+                    $entry { ORGANISM } .= " $ent";
+                }
                 my $tax = @value ? join( ' ', @value ) : '';
                 $tax =~ s/\s*\.$//;
                 $entry{ TAXONOMY } = [ split /; */, $tax ] if $tax;
@@ -660,6 +661,7 @@ sub parse_one_genbank_entry
                 else
                 {
                     $value =~ s/""/"/g  if $value =~ s/^"(.*)"$/$1/;
+                    $value =~ s/ +$//;
                     $value =~ s/ +//g   if $qualif eq 'translation';
                 }
 
@@ -1076,11 +1078,8 @@ sub location
 {
     my ( $ftr ) = @_;
 
-    ( defined( $ftr )
-         && ( ref( $ftr ) eq 'ARRAY' )
-         && ( @$ftr > 1 ) )
-         ? $ftr->[-2]
-         : '';
+    defined( $ftr ) && ( ref( $ftr ) eq 'ARRAY' ) && ( @$ftr > 1 ) ? $ftr->[-2]
+                                                                   : '';
 }
 
 
@@ -1361,7 +1360,7 @@ sub CDS_translation
 #===============================================================================
 #  Utilities for locations and location strings.
 #===============================================================================
-#  Convert GenBank location to a SEED location.
+#  Convert GenBank location to a SEED location string.
 #
 #     $loc                           = genbank_loc_2_seed( $acc, $loc )
 #   ( $loc, $partial_5, $partial_3 ) = genbank_loc_2_seed( $acc, $loc )
@@ -1376,7 +1375,7 @@ sub genbank_loc_2_seed
 
 
 #-------------------------------------------------------------------------------
-#  Convert GenBank location to a Sapling location.
+#  Convert GenBank location to a Sapling location string.
 #
 #     $loc                           = genbank_loc_2_sapling( $acc, $loc )
 #   ( $loc, $partial_5, $partial_3 ) = genbank_loc_2_sapling( $acc, $loc )
@@ -1496,6 +1495,7 @@ sub genbank_loc_2_cbdl
 #
 #    (\S+:)?<?\d+\.\.>?\d+
 #
+#      \@cbdl_list                           = gb_loc_range( $loc, $acc )
 #    ( \@cbdl_list, $partial_5, $partial_3 ) = gb_loc_range( $loc, $acc )
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 sub gb_loc_range
@@ -1510,7 +1510,9 @@ sub gb_loc_range
 
     #  GenBank standard is always $beg <= $end.  We will relax that.
 
-    ( [ [ $acc2, $beg, (($end>=$beg)?'+':'-'), abs($end-$beg)+1 ] ], $p5, $p3 );
+    my $cbdl = [ [ $acc2, $beg, (($end>=$beg)?'+':'-'), abs($end-$beg)+1 ] ];
+
+    wantarray ? ( $cbdl, $p5, $p3 ) : $cbdl;
 }
 
 
@@ -1521,6 +1523,7 @@ sub gb_loc_range
 #
 #    (\S+:)?<?\d+^>?\d+
 #
+#      \@cbdl_list                           = gb_loc_site( $loc, $acc )
 #    ( \@cbdl_list, $partial_5, $partial_3 ) = gb_loc_site( $loc, $acc )
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 sub gb_loc_site
@@ -1535,7 +1538,9 @@ sub gb_loc_site
 
     #  GenBank standard is always $beg <= $end.  We will relax that.
 
-    ( [ [ $acc2, $beg, (($end>=$beg)?'+':'-'), abs($end-$beg)+1 ] ], $p5, $p3 );
+    my $cbdl = [ [ $acc2, $beg, (($end>=$beg)?'+':'-'), abs($end-$beg)+1 ] ];
+
+    wantarray ? ( $cbdl, $p5, $p3 ) : $cbdl;
 }
 
 
@@ -1544,6 +1549,7 @@ sub gb_loc_site
 #
 #    (\S+:)?\d+
 #
+#      \@cbdl_list                           = gb_loc_position( $loc, $acc )
 #    ( \@cbdl_list, $partial_5, $partial_3 ) = gb_loc_position( $loc, $acc )
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 sub gb_loc_position
@@ -1555,11 +1561,14 @@ sub gb_loc_position
     my ( $acc2, $beg ) = $loc =~ /^$position_parts$/;
     $beg or return ();
 
-    ( [ [ $acc2 || $acc, $beg, '+', 1 ] ], '', '' );
+    my $cbdl = [ [ $acc2 || $acc, $beg, '+', 1 ] ];
+
+    wantarray ? ( $cbdl, '', '' ) : $cbdl;
 }
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#      \@cbdl_list                           = gb_loc_complement( $loc, $acc )
 #    ( \@cbdl_list, $partial_5, $partial_3 ) = gb_loc_complement( $loc, $acc )
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 sub gb_loc_complement
@@ -1579,12 +1588,15 @@ sub gb_loc_complement
     my ( $locs, $p5, $p3 ) = genbank_loc_2_cbdl( $loc2, $acc2 || $acc );
     $locs && ref( $locs ) eq 'ARRAY' && @$locs or return ();
 
-    ( [ map { complement_cbdl( @$_ ) } reverse @$locs ], $p3, $p5 );
+    my $cbdl = [ map { complement_cbdl( @$_ ) } reverse @$locs ];
+
+    wantarray ? ( $cbdl, $p5, $p3 ) : $cbdl;
 }
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
+#      \@cbdl_list                           = gb_loc_join( $loc, $acc )
 #    ( \@cbdl_list, $partial_5, $partial_3 ) = gb_loc_join( $loc, $acc )
 #
 #  There is no warning about partial sequences internal to list.
@@ -1618,13 +1630,16 @@ sub gb_loc_join
                    $locs =~ m/($element)/g;
     @elements or return ();
 
-    ( [ map { @{ $_->[0] } } @elements ], $elements[0]->[1], $elements[-1]->[2] );
+    my $cbdl = [ map { @{ $_->[0] } } @elements ];
+
+    wantarray ? ( $cbdl, $elements[0]->[1], $elements[-1]->[2] ) : $cbdl;
 }
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #  Ordered list is treated as a join:
 #
+#      \@cbdl_list                           = gb_loc_order( $loc, $acc )
 #    ( \@cbdl_list, $partial_5, $partial_3 ) = gb_loc_order( $loc, $acc )
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 sub gb_loc_order

@@ -60,20 +60,116 @@ use Data::Dumper;
 #
 #    $genomeTO = resolve_overlapping_features( $genomeTO, $opts );
 #
+#  Options:
+#
+#      phage => $bool   #  Use phage overlap rules (longest orf for a given stop)
+#
 sub resolve_overlapping_features
 {
     my( $genomeTO, $opts ) = @_;
-    my $new_features = pick_features($genomeTO, $opts);
+    $opts ||= {};
+
+    my $new_features = $opts->{ phage } ? pick_phage_features($genomeTO, $opts)
+                                        : pick_features($genomeTO, $opts);
     $genomeTO->{features} = $new_features;
     return $genomeTO;
 }   
 
 
 #
+#  Find the highest scoring set of consistent phage features.
+#
+#     @featureTO = pick_phage_features( $genomeTO, $opts );
+#    \@featureTO = pick_phage_features( $genomeTO, $opts );
+#
+#  As currently defined, this will be the longest peg for every stop location.
+#  At present, there will be no overlap removal of rna features.
+#
+sub pick_phage_features
+{
+    my ( $genomeTO, $opts ) = @_;
+    $genomeTO or return;
+    $opts ||= {};
+
+    my $ftrTOs = $genomeTO->{ features } || [];
+
+    my %seen;
+    my @kept = map  { $_->[0] }                     #  The ftrTO
+               sort { lc $a->[1] cmp lc $b->[1]     #  Order by location
+                   ||    $a->[2] <=>    $b->[2]
+                    }
+               grep { ! $seen{ $_->[3] } }          #  Only highest-scoring for a given stop
+               sort { $b->[4] <=> $a->[4] }         #  Sort by score
+               map  { scalar ftr_contig_mid_stop_score( $_, $opts ) }
+               @$ftrTOs;
+
+    wantarray ? @kept : \@kept;
+}
+
+
+#
+#  Information for choosing phage features.  The emphasis is on getting the
+#  longest proposed CDS for any given stop codon.
+#
+#    [ $ftr, $end_id, $scr, $contig, $mid ] = ftr_end_score_contig_mid( $ftr, \%opts )
+#
+#     $end_id  #  Used for identifying CDS features with same end point.
+#     $scr     #  Used for ranking CDS features with same end point.
+#     $contig  #  Used for sorting features.
+#     $mid     #  Used for sorting features.
+#
+#  Returns empty list on error
+#
+sub ftr_end_score_contig_mid
+{
+    my ( $ftr, $opts ) = @_;
+    $ftr && ref( $ftr ) eq 'HASH' or return ();
+    $opts ||= {};
+
+    my $loc = $ftr->{ location };
+    $loc && ref( $loc ) eq 'ARRAY' && @$loc && $loc->[0] && ref( $loc->[0] ) eq 'ARRAY'
+        or return ();
+
+    #  Initialize with the first (and usually only) part of the location:
+
+    my ( $contig, $beg, $dir, $len ) = @{ $loc->[0] };
+
+    my $size = 0;
+    foreach ( @$loc ) { $size += $_->[3] }
+
+    #  Filter for parts of the location that are the same contig and direction
+    #  (which is almost alway going to be all of them).
+
+    my @part = grep { $_->[0] eq $contig && $_->[2] eq $dir } @$loc;
+    my ( $c, $b, $d, $l ) = @{ $part[-1] };
+    my $end = ( $dir eq '+' ) ? $b + ( $l - 1 ) : $b - ( $l - 1 );
+
+    my $mid = 0.5 * ( $beg, $end );
+
+    #
+    #  If this is a CDS, record the end location; otherwise just use the
+    #  feature id (or the reference to the feature) as a unique id, so there
+    #  will not be overlap removal.
+    #
+
+    my $is_cds = $ftr->{type} =~ m/^(?:CDS|peg)$/i;
+    my $end_id = $is_cds ? "$contig$dir$end" : $ftr->{id} || $ftr;
+
+    my $qual     = $ftr->{quality}  ||= {};
+    my $conf     = min( $qual->{existence_confidence} || 0.5, 0.99 );
+    my $priority = $qual->{priority};
+    my $score    = $priority || ( log( $conf ) / log( 0.5 ) );
+    $score += log( $size / 1000 )  if $is_cds;
+
+    [ $ftr, $end_id, $score, $contig, $mid ];
+}
+
+
+#
 #  Find the highest scoring set of consistent features.
 #
-#     @featureTO = resolve_overlapping_features( $genomeTO, $opts );
-#    \@featureTO = resolve_overlapping_features( $genomeTO, $opts );
+#     @featureTO = pick_features( $genomeTO, $opts );
+#    \@featureTO = pick_features( $genomeTO, $opts );
 #
 sub pick_features
 {
@@ -312,12 +408,12 @@ sub overlap_rules
     foreach ( @$rules0 )
     {
         if    ( s/^\+// ) { $rules->{ $_ }->{ default => { allow => 1 } } }
-        elsif ( s/^-// ) { $rules->{ $_ }->{ default => { same => [ 0, 0.0, 0.0, 0, 0, 1 ],
-                                                          conv => [ 0, 0.0, 0.0, 0, 0, 1 ],
-                                                          div  => [ 0, 0.0, 0.0, 0, 0, 1 ]
-                                                        }
-                                           };
-                         }
+        elsif ( s/^-//  ) { $rules->{ $_ }->{ default => { same => [ 0, 0.0, 0.0, 0, 0, 1 ],
+                                                           conv => [ 0, 0.0, 0.0, 0, 0, 1 ],
+                                                           div  => [ 0, 0.0, 0.0, 0, 0, 1 ]
+                                                         }
+                                            };
+                          }
     }
 
     my $exempt = 0;
@@ -327,16 +423,16 @@ sub overlap_rules
     }
 
     my $conf     = $qual->{existence_confidence} || 0.5;
-    my $hits     = $qual->{hit_count}            ||  0;
+    my $hits     = $qual->{hit_count}            || 0;
     my $priority = $qual->{priority};
     my $score    = $priority || 0;
 
     $type = 'CDS' if $type eq 'peg';
     if ( lc $type eq 'rna' )
     {
-        $type = ( $func =~ /^tRNA/i ) ? 'tRNA'
-              : ( $func =~ /rRNA|ribosomal RNA/i )  ? 'rRNA'
-              :                         $type;
+        $type = ( $func =~ /^tRNA/i )              ? 'tRNA'
+              : ( $func =~ /rRNA|ribosomal RNA/i ) ? 'rRNA'
+              :                                      $type;
     }
 
     if    ( $type eq 'tRNA' )
@@ -396,26 +492,26 @@ sub bounds
     my $loc = $_[0]->{ location };
     $loc && ref( $loc ) eq 'ARRAY' && @$loc && $loc->[0] && ref( $loc->[0] ) eq 'ARRAY'
         or return undef;
-    my $size = 0;
-    my $contig = $loc->[0]->[0] || '';
-    my @parts  = @$loc;
-    my ( $c0, $b, $d, $len ) = @{ shift @parts };
-    my $size += $len;
-    my $e = $b + ( $d eq '+' ? $len-1 : -($len-1) );
-    my ( $left, $right ) = $d eq '+' ? ( $b, $e ) : ( $e, $b );
-    foreach ( @parts )
-    {
-        my ( $c, $b, $d, $len ) = @$_;
-        my $size += $len;
-        $c eq $c0 or next;
-        my $e = $b + ( $d eq '+' ? $len-1 : -($len-1) );
-        my ( $l, $r ) = $d eq '+' ? ( $b, $e ) : ( $e, $b );
-        $left  = $l if $l < $left;
-        $right = $r if $r > $right;
-    }
 
-    ( $c0, $left, $right, $d, $size );
+    my ( $contig, $beg, $dir, $len ) = @{ $loc->[0] };
+
+    my $size = 0;
+    foreach ( @$loc ) { $size += $_->[3] }
+
+    #  Filter for parts of the location that are the same contig and direction
+    #  (which is almost alway going to be all of them).
+
+    my @part = grep { $_->[0] eq $contig && $_->[2] eq $dir } @$loc;
+    my ( $c, $b, $d, $l ) = @{ $part[-1] };
+    my $end = ( $dir eq '+' ) ? $b + ( $l - 1 ) : $b - ( $l - 1 );
+
+    my ( $left, $right ) = min_max( $beg, $end );
+
+    ( $contig, $left, $right, $dir, $size );
 }
+
+
+sub min_max { $_[0] < $_[1] ? @_ : ( $_[1], $_[0] ) }
 
 
 #

@@ -13,19 +13,18 @@ use Digest::MD5 'md5_hex';
 
 use GenomeTypeObject;
 use URI::Escape;
-use Bio::FeatureIO;
 use Bio::SeqIO;
 use Bio::Seq;
+use Bio::Seq::RichSeq;
+use Bio::Species;
 use Bio::Location::Split;
 use Bio::Location::Simple;
 use Bio::SeqFeature::Generic;
-use Bio::SeqFeature::Annotated;
 use Getopt::Long::Descriptive;
 use Spreadsheet::Write;
 use File::Temp;
 
 my $temp_dir;
-my @feature_type;
 
 #
 # Master list of supported formats. When changes happen here please propagate them to
@@ -61,7 +60,7 @@ print($usage->text), exit 1 if @ARGV != 1;
 my $feature_type_ok;
 if (ref($opt->feature_type))
 {
-    my $feature_type = { map { $_ => 1 } @feature_type };
+    my $feature_type = { map { $_ => 1 } @{$opt->feature_type} };
     $feature_type_ok = sub {
 	my($feat) = @_;
 	return $feature_type->{$feat->{type}} ? 1 : 0;
@@ -89,16 +88,7 @@ if ($opt->output) {
     open($out_fh, ">", $opt->output) or die "Cannot open " . $opt->output . ": $!";
 } else { $out_fh = \*STDOUT; }
 
-my $json = JSON::XS->new;
-
-my $genomeTO;
-{
-    local $/;
-    undef $/;
-    my $genomeTO_txt = <$in_fh>;
-    $genomeTO = $json->decode($genomeTO_txt);
-}
-GenomeTypeObject->initialize($genomeTO);
+my $genomeTO = GenomeTypeObject->create_from_file($in_fh);
 
 #
 # For each protein, if the function is blank, make it hypothetical protein.
@@ -155,6 +145,21 @@ my $genome = $genomeTO->{id};
 my $offset = 0;
 my %contig_offset;
 
+my $species;
+my @tax = split(/;\s+/, $genomeTO->{taxonomy});
+if (@tax)
+{
+    $species = Bio::Species->new(-classification => [reverse @tax]);
+}
+my $gc = $genomeTO->{genetic_code} || 11;
+
+my $tax_id = $genomeTO->{ncbi_taxonomy_id};
+if (!$tax_id)
+{
+    ($tax_id) = $genome =~ /^(\d+\.\d+)/;
+}
+my @taxon = defined($tax_id) ? (db_xref => "taxon:$tax_id") : ();
+
 #
 # code is similar but subtly different for the
 # merged/non-merged cases.
@@ -179,6 +184,7 @@ if ($format eq 'genbank_merged')
 						    -end => $contig_end,
 						    -tag => {
 							organism => $gs,
+							@taxon,
 							mol_type => "genomic DNA",
 							note => $genome,
 							note => $contig,
@@ -187,6 +193,7 @@ if ($format eq 'genbank_merged')
 	my $fa_record = Bio::SeqFeature::Generic->new(-start => $contig_start,
 						      -end => $contig_end,
 						      -tag => {
+							  @taxon,
 							  label => $contig,
 							  note => $contig,
 						      },
@@ -195,7 +202,11 @@ if ($format eq 'genbank_merged')
 	
 	$offset += length($c->{dna});
     }
-    my $bseq = Bio::Seq->new(-id => $genome, -seq => $dna);
+    my $bseq = Bio::Seq::RichSeq->new(-id => $genome,
+				      -display_name => $gs,
+				      -accession_number => $genomeTO->{contigs}->[0]->{id},
+				      (defined($species) ? (-species => $species) : ()),
+				      -seq => $dna);
 
     for my $c (@{$genomeTO->{contigs}})
     {
@@ -211,9 +222,12 @@ else
     for my $c (@{$genomeTO->{contigs}})
     {
 	my $contig = $c->{id};
-	$bio->{$contig} = Bio::Seq->new(-id => $contig,
-					-seq => $c->{dna});
-	$bio->{$contig}->desc("Contig $contig from $gs");
+	$bio->{$contig} = Bio::Seq::RichSeq->new(-id => $contig,
+						 -display_name => $gs,
+						 -accession_number => $contig,
+						 (defined($species) ? (-species => $species) : ()),
+						 -seq => $c->{dna});
+	$bio->{$contig}->desc($gs);
 	push(@$bio_list, $bio->{$contig});
 	
 	my $contig_start = $offset + 1;
@@ -224,6 +238,7 @@ else
 	my $feature = Bio::SeqFeature::Generic->new(-start => $contig_start,
 						    -end => $contig_end,
 						    -tag => {
+							  @taxon,
 							organism => $gs,
 							mol_type => "genomic DNA",
 							note => $genome,
@@ -234,6 +249,7 @@ else
 	my $fa_record = Bio::SeqFeature::Generic->new(-start => $contig_start,
 						      -end => $contig_end,
 						      -tag => {
+							  @taxon,
 							  label => $contig,
 							  note => $contig,
 						      },
@@ -356,6 +372,7 @@ for my $f (@{$genomeTO->{features}})
 						     translation => $f->{protein_translation},
 						 },
 						);
+	push @{$note->{transl_table}}, $gc;
 	
 	foreach my $tagtype (keys %$note) {
 	    $feature->add_tag_value($tagtype, @{$note->{$tagtype}});
@@ -548,7 +565,7 @@ sub export_feature_data
 	print $out_fh join("\t", qw(feature_id location type function aliases protein_md5)), "\n";
     }
 
-    my $features = $genomeTO->{features};
+    my $features = $genomeTO->sorted_features();
     foreach my $feature (@$features)
     {
 	next unless &$feature_type_ok($feature);
@@ -560,7 +577,9 @@ sub export_feature_data
 	my $func = $feature->{function};
 	my $md5 = "";
 	$md5 = md5_hex(uc($feature->{protein_translation})) if $feature->{protein_translation};
-	my $aliases = ref($feature->{aliases}) ? join(",",@{$feature->{aliases}}) : "";
+
+	my @aliases = $genomeTO->flattened_feature_aliases($feature);
+	my $aliases = join(",", @aliases);
 
 	print $out_fh join("\t", $fid,$loc,$type,$func,$aliases,$md5), "\n";
     }
@@ -614,7 +633,7 @@ sub export_spreadsheet
 	print $out_fh join("\t", @cols), "\n";
     }
 
-    foreach my $feature (@$features)
+    foreach my $feature ($genomeTO->sorted_features())
     {
 	next unless &$feature_type_ok($feature);
 	my %dat;
@@ -644,7 +663,7 @@ sub export_spreadsheet
 
 	$dat{evidence_codes} = '';
 	$dat{figfam} = '';
-	$dat{aliases} = ref($feature->{aliases}) ? join(",",@{$feature->{aliases}}) : "";
+	$dat{aliases} = join(",", $genomeTO->flattened_feature_aliases($feature));
 
 	if ($ss)
 	{

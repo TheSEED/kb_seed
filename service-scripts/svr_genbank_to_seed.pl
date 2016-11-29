@@ -46,10 +46,12 @@ while(defined(my $accession = gjogenbank::parse_next_genbank($genbank_file))) {
     $figV->display_id_and_seq( $contig_id, \$contig_dna, $contigs_fh);
     
     foreach my $cds (@ { $accession->{FEATURES}->{CDS} }) {
+#	die Dumper($cds);
 	my $gb_loc      = gjogenbank::location( $cds, $accession );
 	my $locus       = gjogenbank::genbank_loc_2_seed($contig_id, $gb_loc);
 	my $func        = gjogenbank::product( $cds ) || q();
 	my $translation = gjogenbank::CDS_translation($cds);
+	my $pseudo      = defined( $cds->[1]->{pseudo}->[0] );
 	
 	my $gene_name   = defined($cds->[1]->{gene}->[0])       ? $cds->[1]->{gene}->[0]       : q();
 	my $locus_tag   = defined($cds->[1]->{locus_tag}->[0])  ? $cds->[1]->{locus_tag}->[0]  : q();
@@ -63,10 +65,25 @@ while(defined(my $accession = gjogenbank::parse_next_genbank($genbank_file))) {
 	my @aliases     = grep { $_ } ($gene_name, $locus_tag, $protein_id, @gi_nums, @db_xrefs, @gene_nums);
 	my $aliases     = join(q(,), @aliases);
 	
-	if ($locus && defined($func) && $translation) {
-	    if (my $fid = $figV->add_feature(q(Initial Import), $taxID, q(peg), $locus, $aliases, $translation)) {
-		if ($func) {
-		    $figV->assign_function($fid, q(master:Initial Import), $func);
+	if ($locus) {
+	    my $fid;
+	    if ($translation) {
+		if ($fid = $figV->add_feature(q(Initial Import), $taxID, q(peg), $locus, $aliases, $translation)) {
+		    if ($func) {
+			$figV->assign_function($fid, q(master:Initial Import), $func);
+		    }		    
+		}
+	    }
+	    elsif ($pseudo) {
+		my $sequence = gjogenbank::ftr_seq( $cds, $contig_dna);
+		if ($fid = $figV->add_feature(q(Initial Import), $taxID, q(pseudo), $locus, $aliases, $sequence)) {
+		    if ($func) {
+			if ($func !~ m/pseudogene/i) {
+			    $func .= " # pseudogene";
+			}
+			
+			$figV->assign_function($fid, q(master:Initial Import), $func);
+		    }
 		}
 	    }
 	    else {
@@ -75,6 +92,53 @@ while(defined(my $accession = gjogenbank::parse_next_genbank($genbank_file))) {
 	}
 	else {
 	    warn (qq(Could not parse CDS feature in accession '$contig_id':\n), Dumper($cds), qq(\n));
+	}
+    }
+    
+    foreach my $rna (map { $_ ? @$_ : () }
+		     map { my $x = $accession->{FEATURES}->{$_}
+		     } qw( rRNA tRNA misc_RNA ncRNA )
+	) {
+#	die Dumper($rna);
+	
+	my $gb_loc      = gjogenbank::location( $rna, $accession );
+	my $locus       = gjogenbank::genbank_loc_2_seed($contig_id, $gb_loc);
+	my $func        = gjogenbank::product( $rna ) || q();
+	my $sequence    = gjogenbank::ftr_seq( $rna, $contig_dna);
+	
+	my $gene_name   = defined($rna->[1]->{gene}->[0])       ? $rna->[1]->{gene}->[0]       : q();
+	my $locus_tag   = defined($rna->[1]->{locus_tag}->[0])  ? $rna->[1]->{locus_tag}->[0]  : q();
+	
+	my @db_xrefs    = defined($rna->[1]->{db_xref}->[0])    ? @ { $rna->[1]->{db_xref} }   : ();
+	
+	my @gi_nums     = map { m/GI\:(\d+)/o     ? (q(gi|).$1)     : () } @db_xrefs;
+	my @gene_nums   = map { m/GeneID\:(\d+)/o ? (q(GeneID|).$1) : () } @db_xrefs;
+	
+	my @aliases     = grep { $_ } ($gene_name, $locus_tag, @gi_nums, @db_xrefs, @gene_nums);
+	my $aliases     = join(q(,), @aliases);
+	
+	if ($locus && defined($func) && $sequence) {
+	    if (my $fid = $figV->add_feature(q(Initial Import), $taxID, q(rna), $locus, $aliases, $sequence)) {
+		if ($func) {
+		    if ($func =~ m/23S\s+(ribosomal)?\s+RNA/i) { 
+			$func =  q(LSU rRNA ## 23S rRNA, large subunit ribosomal RNA);
+		    }
+		    elsif ($func =~ m/16S\s+(ribosomal)?\s+RNA/i) { 
+			$func = q(SSU rRNA ## 16S rRNA, small subunit ribosomal RNA);
+		    }
+		    elsif ($func =~ m/5S\s+(ribosomal)?\s+RNA/i) {
+			$func = q(5S rRNA ## 5S ribosomal RNA);
+		    }
+		    
+		    $figV->assign_function($fid, q(master:Initial Import), $func);
+		}
+	    }
+	    else {
+		die (qq(Could not add feature\n), Dumper($rna));
+	    }
+	}
+	else {
+	    warn (qq(Could not parse RNA feature in accession '$contig_id': locus='$locus', func='$func', sequence='$sequence'\n), Dumper($rna), qq(\n));
 	}
     }
 }

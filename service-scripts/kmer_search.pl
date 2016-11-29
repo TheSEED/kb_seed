@@ -121,6 +121,7 @@ my($opt, $usage) = describe_options("%c %o < input",
 				    ["rast-dirs|r=s" => "RAST directories to use for input"],
 				    ["a" => "input is amino acid sequences"],
 				    ["z" => "compute Z-scores"],
+				    ["debug" => "show per-hit kmer debugging data (genome - amino acid only)"],
 				    ["help|h" => "Show this help message"],
 				    [],
 				    ["The --data-dir and --server parameters are mutually exclusive; exactly one must be provided"]);
@@ -231,12 +232,21 @@ if ($dataD && ! -s "$dataD/kmer.table.mem_map")
 push(@kmer_guts_params, "-a") if $aa;
 
 my $command;
+my($dbg_1, $dbg_2);
 my $z = $zscores ? '-z' : '';
 if ($search_type eq 'genomes')
 {
     if ($aa)
     {
-	$command = "$kmer_guts @kmer_guts_params | km_process_hits_to_regions -a -d $dataD $z | km_pick_best_hit_in_peg";
+	if ($opt->debug)
+	{
+	    $dbg_1 = "$kmer_guts -d 1 @kmer_guts_params";
+	    $dbg_2 = "km_process_hits_to_regions -a -d $dataD $z | km_pick_best_hit_in_peg";
+	}
+	else
+	{
+	    $command = "$kmer_guts @kmer_guts_params | km_process_hits_to_regions -a -d $dataD $z | km_pick_best_hit_in_peg";
+	}
     }
     else
     {
@@ -269,9 +279,73 @@ else
 # close(INPUT);
 # close(RUN);
 
-my $rc = system($command);
-if ($rc != 0)
+if (!$opt->debug)
 {
-    print STDERR "Command failed with rc=$rc: $command\n";
-    exit $rc;
+    my $rc = system($command);
+    if ($rc != 0)
+    {
+	print STDERR "Command failed with rc=$rc: $command\n";
+	exit $rc;
+    }
+    exit;
+}
+
+#
+# Debugging. We need to load the function index.
+#
+
+my @funcs;
+open(FI, "<", "$dataD/function.index") or die "Cannot open $dataD/function.index: $!";
+while (<FI>)
+{
+    chomp;
+    my($idx, $fun) = split(/\t/);
+    $funcs[$idx] = $fun;
+}
+close(FI);
+
+my @prot_alpha = ('A','C','D','E','F','G','H','I','K','L','M','N','P','Q','R','S','T','V','W','Y');
+
+open(P1, "$dbg_1 |") or die "Cannot open pipe 1 $dbg_1: $!";
+open(P2, "| $dbg_2") or die "Cannot open pipe 2 $dbg_2: $!";
+
+my $cur;
+while (<P1>)
+{
+    my $orig = $_;
+    chomp;
+    my($key, @parts) = split(/\t/);
+    if ($key eq 'PROTEIN-ID')
+    {
+	$cur = $parts[0];
+	print P2 $orig;
+	print $orig;
+    }
+    elsif ($key eq 'CALL' || $key eq 'OTU-COUNTS')
+    {
+	print P2 $orig;
+	print $orig;
+    }
+    elsif ($key eq 'HIT')
+    {
+	my($loc, $enc, $off, $fI, $f_wt, $oI) = @parts;
+	my $dec = decode_kmer($enc);
+	my $func = $funcs[$fI];
+	print join("\t", $key, $dec, $loc, $func), "\n";
+    }
+}
+
+
+sub decode_kmer
+{
+    my($enc) = @_;
+    my $k = 8;
+    my $d= '';
+    my $x = $enc;
+    for (my $i = $k - 1; $i >= 0; $i--)
+    {
+	$d .= $prot_alpha[$x % 20];
+	$x /= 20;
+    }
+    return scalar reverse $d;
 }

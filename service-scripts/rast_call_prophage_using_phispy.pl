@@ -128,9 +128,9 @@ my @cmd = ("$runtime/bin/python", "$phispy/phiSpy.py", "-i", "" . $seed_dir, "-o
 my $cmd = "@cmd > $out/phispy.stdout 2> $out/phispy.stderr";
 print STDERR "Run $cmd\n";
 $rc = system($cmd);
-my $err = read_file("$out/phispy.stderr");
 if ($rc != 0)
 {
+    my $err = read_file("$out/phispy.stderr");
     die "Error $rc running @cmd\n$err";
 }
 
@@ -150,29 +150,37 @@ my $event = {
 };
 my $event_id = &GenomeTypeObject::add_analysis_event($genomeTO, $event);
 
-open(O, "<", "$out/prophage.tbl") or die "Cannot open $out/prophage.tbl: $!\n";
-
-while (<O>)
+if (open(O, "<", "$out/prophage.tbl"))
 {
-    chomp;
-    my($xid, $loc) = split(/\t/);
-
-    my($contig, $beg, $end) = $loc =~ /^(\S+)_(\d+)_(\d+)$/;
-
-    my $len = $end - $beg + 1;
-    if ($contig)
+    while (<O>)
     {
-	&GenomeTypeObject::add_feature($genomeTO, {
-	    -id_client => $id_client,
-	    -id_prefix => $id_prefix,
-	    -type       => $type,
-	    -location   => [[ $contig, $beg, '+', $len ]],
-	    -annotator  => 'phispy',
-	    -annotation => 'Add feature called by phispy',
-	    -analysis_event_id   => $event_id,
-	    -function => 'phiSpy-predicted prophage',
-	});
+	chomp;
+	my($xid, $loc) = split(/\t/);
+	
+	my($contig, $beg, $end) = $loc =~ /^(\S+)_(\d+)_(\d+)$/;
+	
+	my $len = $end - $beg + 1;
+	if ($contig)
+	{
+	    &GenomeTypeObject::add_feature($genomeTO, {
+		-id_client => $id_client,
+		-id_prefix => $id_prefix,
+		-type       => $type,
+		-location   => [[ $contig, $beg, '+', $len ]],
+		-annotator  => 'phispy',
+		-annotation => 'Add feature called by phispy',
+		-analysis_event_id   => $event_id,
+		-function => 'phiSpy-predicted prophage',
+	    });
+	}
     }
+    close(O);
+}
+else
+{
+    my $err = read_file("$out/phispy.stderr");
+    my $out = read_file("$out/phispy.stdout");
+    print STDERR "Prophage run did not find any output. Stdout:\n$out\nStderr:\n$err\n";
 }
 
 $genomeTO->destroy_to_file($out_fh);

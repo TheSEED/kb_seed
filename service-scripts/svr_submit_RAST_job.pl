@@ -39,6 +39,9 @@ my $gene_caller      = q(RAST);
 my $keep_genecalls   = 0;
 my $use_test_server  = 0;
 my $determine_family = 0;
+my $fix_frameshifts = 0;
+my $backfill_gaps = 1;
+my $use_rasttk = 0;
 my $kmer_dataset;
 my $non_active = 0;
 my $rc = GetOptions(
@@ -57,6 +60,8 @@ my $rc = GetOptions(
     "nonActive"	       => \$non_active,
     "determine_family" => \$determine_family,
     "kmerDataset"      => \$kmer_dataset,
+    "fix_frameshifts" => \$fix_frameshifts,
+    "rasttk" => \$use_rasttk,
     );
 
 print STDERR qq(\nrc=$rc\n\n) if $ENV{VERBOSE};
@@ -92,6 +97,9 @@ my $arg_hashP = { -taxonomyID      => $taxon_ID,
 		  -domain	   => $domain,
 		  -non_active      => $non_active,
 		  -determineFamily => $determine_family,
+		  -backfillGaps => $backfill_gaps,
+		  -fixFrameshifts => $fix_frameshifts,
+		  ($use_rasttk ? (-annotationScheme => 'RASTtk') : ()),
 	      };
 
 if (defined($kmer_dataset))

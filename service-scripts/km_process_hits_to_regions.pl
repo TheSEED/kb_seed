@@ -29,6 +29,16 @@ if ($z && (! -s "$dataD/function.stats"))
 #
 
 my $otu_index = &load_otu_index("$dataD/otu.index");
+my $to_coord;
+
+if ($aa)
+{
+    $to_coord = \&to_coord_aa;
+}
+else
+{
+    $to_coord = \&to_coord_dna;
+}
 
 my($hits,$otuH) = &load_hits($otu_index,$aa);
 my @merged;
@@ -87,7 +97,7 @@ sub function {
     return $x->[6];
 }
 
-# tuples contain [contig,beg,end,hits,function,frame]
+# tuples contain [contig,beg,end,strand,frame,hits,function,function-index,weighted-score]
 sub process_merged {
     my($dataD,$merged,$aa,$z,$fparms) = @_;
 
@@ -101,20 +111,43 @@ sub process_merged {
     }
     my @collapsed;
     my $i=0;
+
+    #
+    # Merge adjacent hits with the same function. We adjust the
+    # end of the first hit to be the end of the second hit and
+    # add the score.
+    #
+    
     while ($i < @merged)
     {
 	push(@collapsed,$merged[$i++]);
 	while (($i < @merged) && 
-	       (&id($merged[$i]) eq &strand($collapsed[-1])) &&
+	       (&id($merged[$i]) eq &id($collapsed[-1])) &&
 	       (&strand($merged[$i]) eq &strand($collapsed[-1]))  &&
 	       (&function($merged[$i]) eq &function($collapsed[-1])))
 	{
+	    my $left = $collapsed[-1];
+	    my $right = $merged[$i];
+	    # print STDERR "Merge 1 $left->[0] $left->[2] and $right->[0] $right->[2]\n";
 	    $collapsed[-1]->[2] = $merged[$i]->[2];
+	    $collapsed[-1]->[5] += $merged[$i]->[5];
 	    $i++;
 	}
     }
 
     $i = 0;
+    #
+    # Merge hits when we have a case with
+    # +------+--+-------+--+-----------+
+    # |  F1  |  |   F2  |  |   F1      |
+    # +------+--+-------+--+-----------+
+    #
+    # where the score for F2 is below 5 and the combined scores for
+    # the two F1 hits is 10 or more.
+    #
+    # If that is the case we discard the F2 hit and combine
+    # the F1 hits.
+    #
     undef @merged;
     while ($i < @collapsed)
     {
@@ -125,8 +158,11 @@ sub process_merged {
 	       (&hits($collapsed[$i]) < 5) &&
 	       ((&hits($merged[-1]) + &hits($collapsed[$i+1])) >= 10))
 	{
+	    my $left = $merged[-1];
+	    my $right = $collapsed[$i+1];
+	    # print STDERR "Merge 2 $left->[0] $left->[2] and $right->[0] $right->[2]\n";
 	    $merged[-1]->[2]  = $collapsed[$i+1]->[2];
-	    $merged[-1]->[3] += $collapsed[$i+1]->[3];
+	    $merged[-1]->[5] += $collapsed[$i+1]->[5];
 	    $i += 2;
 	}
     }
@@ -208,8 +244,8 @@ sub load_hits {
 	{
 	    my($beg0,$end0,$hitsN,$fI,$f,$weighted_sc) = ($1,$2,$3,$4,$5,$6);
 	    $f =~ s/\s+\#.*$//;
-	    my $beg1 = &to_coord($beg0,$frame,$strand,$contig_ln);
-	    my $end1 = &to_coord($end0,$frame,$strand,$contig_ln);
+	    my $beg1 = &$to_coord($beg0,$frame,$strand,$contig_ln);
+	    my $end1 = &$to_coord($end0,$frame,$strand,$contig_ln);
 	    push(@hits,[$contig,
 			&SeedUtils::min($beg1,$end1),
 			&SeedUtils::max($beg1,$end1),
@@ -244,7 +280,7 @@ sub load_hits {
     return(\@sorted,$otuH);
 }
 
-sub to_coord {
+sub to_coord_dna {
     my($x,$frame,$strand,$contig_ln) = @_;
 
     if ($strand eq "+")
@@ -255,5 +291,11 @@ sub to_coord {
     {
 	return ($contig_ln - (($x * 3) - $frame));
     }
+}
+
+sub to_coord_aa {
+    my($x,$frame,$strand,$contig_ln) = @_;
+
+    return $x;
 }
 

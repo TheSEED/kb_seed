@@ -44,7 +44,7 @@ my $g_to_o = &build_otu_index($dataD);
 
 &build_function_index($dataD,$use_pub_seed,$rast_dirs);     # builds the function index 
 
-&build_reduced_kmers($dataD,
+my $sz = &build_reduced_kmers($dataD,
 		     $use_pub_seed,
 		     $rast_dirs,
 		     $g_to_o,
@@ -53,11 +53,19 @@ my $g_to_o = &build_otu_index($dataD);
                      $seqs_with_func,
                      $seqs_with_a_signature);
 
-my $sz = &make_final($dataD,
-		     $seqs_with_a_signature,
-		     $distinct_signatures,
-		     $distinct_functions,
-		     $seqs_with_func);
+if ($ENV{KM_SKIP_WEIGHTED_SCORE_COMPUTATION})
+{
+    symlink("reduced.kmers", "$dataD/final.kmers") or die "Symlink reduced.kmers to $dataD/final.kmers failed: $!";
+}
+else
+{
+    &make_final($dataD,
+		$seqs_with_a_signature,
+		$distinct_signatures,
+		$distinct_functions,
+		$seqs_with_func);
+}
+
 open(SZ,">$dataD/size") || die "could not write size = $sz: $!";
 print SZ "$sz\n";
 close(SZ);
@@ -350,38 +358,74 @@ sub build_reduced_kmers {
     open(RAW,"<$dataD/sorted.kmers") || die "could not open sorted.kmers: $!";
     
     open(REDUCED,">$dataD/reduced.kmers") || die "could not open reduced kmers: $!";
-    my $last = <RAW>;
+    open(REJECTED,">$dataD/rejected.kmers") || die "could not open rejected kmers: $!";
+#     my $last = <RAW>;
 
-    while ($last && ($last =~ /^(\S+)/))
+#     while ($last && ($last =~ /^(\S+)/))
+#     {
+# 	my $curr = $1;
+# 	my @set;
+# 	while ($last)
+# 	{
+# 	    if ($last =~ /^(\S+)\t(\S*)\t(\S*)\t(\S*)\t(\S+)$/)
+# 	    {
+# 		if ($1 eq $curr)
+# 		{
+# 		    push(@set,[$2,$3,$4,$5]);
+# 		    $last = <RAW>;
+# 		}
+# 		else
+# 		{
+# 		    last;
+# 		}
+# 	    }
+# 	    else
+# 	    {
+# 		die "Invalid line $. in merged data\n$last\n";
+# 	    }
+# 	}
+# 	&process_set($curr,\@set,\*REDUCED,$seqs_with_a_signature,$distinct_signatures,$distinct_functions,\*REJECTED);
+#     }
+
+    my @set;
+    my $cur;
+    my $size = 0;
+
+    my $write_kmers;
+    if ($ENV{KM_SKIP_WEIGHTED_SCORE_COMPUTATION})
     {
-	my $curr = $1;
-	my @set;
-	while ($last)
-	{
-	    if ($last =~ /^(\S+)\t(\S*)\t(\S*)\t(\S*)\t(\S+)$/)
-	    {
-		if ($1 eq $curr)
-		{
-		    push(@set,[$2,$3,$4,$5]);
-		    $last = <RAW>;
-		}
-		else
-		{
-		    last;
-		}
-	    }
-	    else
-	    {
-		die "Invalid line $. in merged data\n$last\n";
-	    }
-	}
-	&process_set($curr,\@set,\*REDUCED,$seqs_with_a_signature,$distinct_signatures,$distinct_functions);
+	$write_kmers = \&write_kmers_for_final_output;
     }
+    else
+    {
+	$write_kmers = \&write_kmers_for_weighted_score_computation;
+    }
+       
+    while (defined(my $row = <RAW>))
+    {
+	chomp $row;
+	my($kmer, $fI, $oI, $off, $seqID) = split(/\t/, $row);
+
+	if ($kmer ne $cur)
+	{
+	    &process_set($cur,\@set,\*REDUCED,$seqs_with_a_signature,$distinct_signatures,$distinct_functions,\*REJECTED, $write_kmers, \$size) if @set;
+	    @set = ();
+	    $cur = $kmer;
+	}
+	push(@set,[$fI, $oI, $off, $seqID]);
+    }
+    &process_set($cur,\@set,\*REDUCED,$seqs_with_a_signature,$distinct_signatures,$distinct_functions,\*REJECTED, $write_kmers, \$size) if @set;
     close(REDUCED);
-    unlink("$dataD/sorted.kmers");
+    close(REJECTED);
+    if (!$ENV{KM_KEEP_INTERMEDIATES})
+    {
+	unlink("$dataD/sorted.kmers");
+    }
+    return $size;
 }
 sub process_set {
-    my($kmer,$set,$fh,$seqs_with_a_signature,$distinct_signatures,$distinct_functions) = @_;
+    my($kmer,$set,$fh,$seqs_with_a_signature,$distinct_signatures,$distinct_functions,
+       $rejected_fh, $write_kmers, $sizeP) = @_;
 
     my %funcs;
     my $tot = 0;
@@ -419,15 +463,61 @@ sub process_set {
 	}
 	my @offsets = sort { $a <=> $b } map { $_->[2] } @$set;
 	my $median_off = $offsets[int(scalar @offsets / 2)];
-	print $fh join("\t",($kmer,
-			     $median_off,
-			     $best_fI,
-			     $otu,
-			     $seqs_containing_sig,
-			     $seqs_containing_func)),"\n";
+
+	$$sizeP++;
+	&$write_kmers($fh,
+		      $kmer,
+		      $median_off,
+		      $best_fI,
+		      $otu,
+		      $seqs_containing_sig,
+		      $seqs_containing_func);
+# 	print $fh join("\t",($kmer,
+# 			     $median_off,
+# 			     $best_fI,
+# 			     $otu,
+# 			     $seqs_containing_sig,
+# 			     $seqs_containing_func)),"\n";
 	$$distinct_signatures++;
 	$distinct_functions->{$best_fI} = 1;
     }
+    else
+    {
+	print $rejected_fh join("\t", $kmer, $tot, map { ($_, $funcs{$_}) } @tmp,), "\n";
+    }
+}
+
+sub write_kmers_for_weighted_score_computation
+{
+    my($fh, $kmer,
+       $median_off,
+       $best_fI,
+       $otu,
+       $seqs_containing_sig,
+       $seqs_containing_func) = @_;
+
+    print $fh join("\t",($kmer,
+			 $median_off,
+			 $best_fI,
+			 $otu,
+			 $seqs_containing_sig,
+			 $seqs_containing_func)),"\n";
+}
+
+sub write_kmers_for_final_output
+{
+    my($fh, $kmer,
+       $median_off,
+       $best_fI,
+       $otu,
+       $seqs_containing_sig,
+       $seqs_containing_func) = @_;
+
+    print $fh join("\t",($kmer,
+			 $median_off,
+			 $best_fI,
+			 100,
+			 $otu)), "\n";
 }
 
 sub load_id_to_fI {
@@ -532,7 +622,10 @@ sub make_final {
 	$size++;
     }
     close(IN);
-    unlink("$dataD/reduced.kmers");
+    if (!$ENV{KM_KEEP_INTERMEDIATES})
+    {
+	unlink("$dataD/reduced.kmers");
+    }
     close(OUT);
     return $size;
 }
