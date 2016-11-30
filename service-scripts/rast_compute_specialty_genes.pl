@@ -164,7 +164,7 @@ while (my($id, $def, $seq) = read_next_fasta_seq(\*IN))
 close(IN);
 
 my %val;
-if (%md5 && @db)
+if (%md5 && @db && $dbh)
 {
     my @md5 = keys %md5;
     my $q = join(", ", map { "?" } @md5);
@@ -315,7 +315,7 @@ for my $db (@db)
 	    {
 		# we computed this and had no hit
 		# print "Update $db $md5 no hi\n";
-		$sth_miss->execute($md5, $db);
+		$sth_miss->execute($md5, $db) if $sth_miss;
 	    }
 	    else
 	    {
