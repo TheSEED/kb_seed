@@ -2,6 +2,7 @@
 
 use strict;
 use warnings;
+no warnings 'uninitialized';
 use Data::Dumper;
 use File::Copy;
 use SeedUtils;
@@ -40,6 +41,7 @@ my @formats = ([genbank => "Genbank format"],
 	       [contig_fasta => "Contig DNA in fasta format"],
 	       [feature_dna => "Feature DNA sequences in fasta format"],
 	       [seed_dir => "SEED directory"],
+	       [patric_features => "PATRIC features.tab format"],
 	       [gff => "GFF format"],
 	       [embl => "EMBL format"]);
 
@@ -113,6 +115,11 @@ if ($format eq 'protein_fasta')
 elsif ($format eq 'contig_fasta')
 {
     export_contig_fasta($genomeTO, $out_fh);
+    exit;
+}
+elsif ($format eq 'patric_features')
+{
+    export_patric_features($genomeTO, $out_fh);
     exit;
 }
 elsif ($format eq 'feature_data')
@@ -582,6 +589,81 @@ sub export_feature_data
 	my $aliases = join(",", @aliases);
 
 	print $out_fh join("\t", $fid,$loc,$type,$func,$aliases,$md5), "\n";
+    }
+}
+
+sub export_patric_features
+{
+    my($genomeTO, $out_fh) = @_;
+
+    my @headings = qw(genome_id genome_name accession
+		      annotation feature_type patric_id
+		      refseq_locus_tag alt_locus_tag uniprotkb_accession
+		      start end strand na_length gene product
+		      figfam_id plfam_id pgfam_id go ec pathway);
+		      
+    print $out_fh join("\t", @headings), "\n";
+
+    my $features = $genomeTO->sorted_features();
+    my %common_dat = (genome_id => $genomeTO->{id},
+		      genome_name => $genomeTO->{scientific_name});
+		      
+    foreach my $feature (@$features)
+    {
+	my %dat = %common_dat;
+
+	my $fid = $feature->{id};
+
+	my($contig, $min, $max, $dir) = SeedUtils::boundaries_of(map { my($c,$s,$d,$l) = @$_; "${c}_$s$d$l" } @{$feature->{location}});
+
+	$dat{accession} = $contig;
+	$dat{annotation} = 'PATRIC';
+	$dat{feature_type} = $feature->{type};
+	$dat{patric_id} = $fid;
+	$dat{product} = $feature->{function};
+	$dat{na_length} = $max - $min + 1;
+	if ($dir eq '+')
+	{
+	    $dat{start} = $min;
+	    $dat{end} = $max;
+	}
+	else
+	{
+	    $dat{start} = $max;
+	    $dat{end} = $min;
+	}
+
+	for my $fam (@{$feature->{family_assignments}})
+	{
+	    my($ftype, $id, $val, $version) = @$fam;
+	    if ($ftype eq 'PGFAM')
+	    {
+		$dat{pgfam_id} = $id;
+	    }
+	    elsif ($ftype eq 'PLFAM')
+	    {
+		$dat{plfam_id} = $id;
+	    }
+	    if ($ftype eq 'FIGFAM')
+	    {
+		$dat{figfam_id} = $id;
+	    }
+	}
+
+	for my $ap (@{$feature->{alias_pairs}})
+	{
+	    my($ak, $v) = @$ap;
+	    if ($ak eq 'locus_tag')
+	    {
+		$dat{refseq_locus_tag} = $v;
+	    }
+	    elsif ($ak eq 'gene')
+	    {
+		$dat{gene} = $v;
+	    }
+	}
+	
+	print $out_fh join("\t", @dat{@headings}), "\n";
     }
 }
 
