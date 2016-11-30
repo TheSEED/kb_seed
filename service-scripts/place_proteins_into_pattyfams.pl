@@ -48,6 +48,25 @@ close(IF);
 my $fasta_data;
 my $gto;
 my %vers;
+
+
+#
+# Look up version data from kmer server.
+#
+# This also tells us if it supports family calling.
+#
+my $res = $ua->get("$url/version");
+if ($res->is_success)
+{
+    my $txt = $res->content;
+    while ($txt =~ /^(.*)\t(.*)$/mg)
+    {
+	$vers{$1} = $2;
+    }
+}
+
+my $have_family_mode = $vers{'family-mode'};
+
 if ($l =~ /^>/)
 {
     $file_type = 'fasta';
@@ -60,19 +79,6 @@ else
     $fasta_data = $gto->extract_protein_sequences_to_temp_file();
 
     ($genus_name) = $gto->{scientific_name} =~ /^(\S+)/;
-
-    #
-    # Look up version data.
-    #
-    my $res = $ua->get("$url/version");
-    if ($res->is_success)
-    {
-	my $txt = $res->content;
-	while ($txt =~ /^(.*)\t(.*)$/mg)
-	{
-	    $vers{$1} = $2;
-	}
-    }
 
     my $hostname = `hostname`;
     chomp $hostname;
@@ -90,6 +96,7 @@ else
     my $event_id = $gto->add_analysis_event($event);
     
 }
+
 
 #
 # Look up tax id of genus.
@@ -159,7 +166,18 @@ while (<P>)
 	# print STDERR;
 	last if /^\/\//;
 	chomp;
-	my($mfid, $score, $pgf, $plf, $func) = split(/\t/);
+	#
+	# Kser with family mode has a different number of columns.
+	#
+	my($mfid, $score, $pgf, $plf, $func);
+	if ($have_family_mode)
+	{
+	    ($mfid, $score, undef, $pgf, $plf, undef, undef, undef, $func) = split(/\t/);
+	}
+	else
+	{
+	    ($mfid, $score, $pgf, $plf, $func) = split(/\t/);
+	}
 	next if $func ne $this_call;
 	next if $score < $opt->required_common_kmers;
 
