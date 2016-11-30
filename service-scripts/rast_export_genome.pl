@@ -622,6 +622,7 @@ sub export_patric_features
 	$dat{patric_id} = $fid;
 	$dat{product} = $feature->{function};
 	$dat{na_length} = $max - $min + 1;
+	$dat{strand} = $dir;
 	if ($dir eq '+')
 	{
 	    $dat{start} = $min;
