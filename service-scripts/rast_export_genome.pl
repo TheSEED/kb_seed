@@ -7,6 +7,8 @@ use Data::Dumper;
 use File::Copy;
 use SeedUtils;
 use gjoseqlib;
+use Date::Parse;
+use POSIX;
 
 use Bio::KBase::GenomeAnnotation::Client;
 use JSON::XS;
@@ -42,6 +44,8 @@ my @formats = ([genbank => "Genbank format"],
 	       [feature_dna => "Feature DNA sequences in fasta format"],
 	       [seed_dir => "SEED directory"],
 	       [patric_features => "PATRIC features.tab format"],
+	       [patric_specialty_genes => "PATRIC spgenes.tab format"],
+	       [patric_genome_metadata => "PATRIC genome metadata format"],
 	       [gff => "GFF format"],
 	       [embl => "EMBL format"]);
 
@@ -120,6 +124,16 @@ elsif ($format eq 'contig_fasta')
 elsif ($format eq 'patric_features')
 {
     export_patric_features($genomeTO, $out_fh);
+    exit;
+}
+elsif ($format eq 'patric_specialty_genes')
+{
+    export_patric_specialty_genes($genomeTO, $out_fh);
+    exit;
+}
+elsif ($format eq 'patric_genome_metadata')
+{
+    export_patric_genome_metadata($genomeTO, $out_fh);
     exit;
 }
 elsif ($format eq 'feature_data')
@@ -668,6 +682,104 @@ sub export_patric_features
     }
 }
 
+sub export_patric_specialty_genes
+{
+    my($genomeTO, $out_fh) = @_;
+
+    my @headings = qw(genome_name patric_id refseq_locus_tag alt_locus_tag gene product property source
+		      evidence source_id organism function classification pmid query_coverage subject_coverage
+		      identity e_value);
+		      
+    print $out_fh join("\t", @headings), "\n";
+
+    my $features = $genomeTO->sorted_features();
+    my %common_dat = (genome_id => $genomeTO->{id},
+		      genome_name => $genomeTO->{scientific_name},
+		      organism => $genomeTO->{scientific_name});
+		      
+    # typedef tuple <string source, string source_id,
+    #   float query_coverage, float subject_coverage, float identity, float e_value>
+    # similarity_association;
+
+
+    foreach my $feature (@$features)
+    {
+	my $assoc = $feature->{similarity_associations};
+	next unless ref($assoc) && @$assoc;
+
+	for my $val (@$assoc)
+	{
+	    my %dat = %common_dat;
+	    my($db, $dbid, $qry, $subj, $iden, $eval) = @$val;
+
+	    $dbid =~ s/^$db\|//;
+
+	    $dat{source} = $db;
+	    $dat{evidence} = 'BLASTP';
+	    $dat{source_id} = $dbid;
+	    $dat{query_coverage} = $qry;
+	    $dat{subject_coverage} = $subj;
+	    $dat{identity} = $iden;
+	    $dat{e_value} = $eval;
+
+	    my $fid = $feature->{id};
+
+	    $dat{patric_id} = $fid;
+	    $dat{function} = $feature->{function};
+
+	    for my $ap (@{$feature->{alias_pairs}})
+	    {
+		my($ak, $v) = @$ap;
+		if ($ak eq 'locus_tag')
+		{
+		    $dat{refseq_locus_tag} = $v;
+		}
+		elsif ($ak eq 'gene')
+		{
+		    $dat{gene} = $v;
+		}
+	    }
+
+	    print $out_fh join("\t", @dat{@headings}), "\n";
+	}
+    }
+}
+
+sub export_patric_genome_metadata
+{
+    my($genomeTO, $out_fh) = @_;
+
+    my @headings = qw(genome_id genome_name organism_name taxon_id genome_status strain serovar biovar 
+		      pathovar mlst other_typing culture_collection type_strain 
+		      completion_date publication bioproject_accession biosample_accession 
+		      assembly_accession genbank_accessions refseq_accessions 
+		      sequencing_centers sequencing_status sequencing_platform sequencing_depth assembly_method 
+		      chromosomes plasmids contigs sequences genome_length gc_content patric_cds brc1_cds refseq_cds 
+		      isolation_site isolation_source isolation_comments collection_date isolation_country 
+		      geographic_location latitude longitude altitude depth other_environmental 
+		      host_name host_gender host_age host_health body_sample_site body_sample_subsite 
+		      other_clinical antimicrobial_resistance antimicrobial_resistance_evidence gram_stain 
+		      cell_shape motility sporulation temperature_range optimal_temperature salinity 
+		      oxygen_requirement habitat disease comments additional_metadata source source_id);
+
+    print $out_fh join("\t", @headings), "\n";
+
+    my $dat = getGenomeInfo($genomeTO);
+
+    $dat->{source} = $genomeTO->{source};
+    $dat->{source_id} = $genomeTO->{source_id};
+
+    for my $f (@{$genomeTO->{features}})
+    {
+	if ($f->{type} eq 'CDS')
+	{
+	    $dat->{patric_cds}++;
+	}
+    }
+    
+    print $out_fh join("\t", @$dat{@headings}), "\n";
+}
+
 sub export_seed_dir
 {
     my($genomeTO, $out_fh) = @_;
@@ -764,3 +876,81 @@ sub export_spreadsheet
 	copy("$tmp", $out_fh);
     }
 }
+
+#
+# Hoisted from rast2solr; compute aggregate genome metadata.
+#
+sub getGenomeInfo
+{
+    my($genomeObj) = @_;
+    my $genome = {};
+    
+    my ($chromosomes, $plasmids, $contigs, $sequences, $cds, $genome_length, $gc_count, $taxon_lineage_ranks);
+    
+    $genome->{owner} = $genomeObj->{owner}? $genomeObj->{owner} : "PATRIC";
+    
+    $genome->{genome_id} = $genomeObj->{id};
+    $genome->{genome_name} = $genomeObj->{scientific_name};
+    $genome->{common_name} = $genomeObj->{scientific_name};
+    $genome->{common_name}=~s/\W+/_/g;
+    $genome->{organism_name} = $genome->{common_name};
+    
+    $genome->{taxon_id}    =  $genomeObj->{ncbi_taxonomy_id};
+    
+    foreach my $type (@{$genomeObj->{typing}}){
+	$genome->{mlst} .= "," if $genome->{mlst};
+	$genome->{mlst} .= $type->{typing_method}.".".$type->{database}.".".$type->{tag};
+	#$genome->{mlst} .= "," if $genome->{mlst};
+	#$genome->{mlst} .= @{$type}[0].".".@{$type}[1].".".@{$type}[2];
+    }
+    
+    foreach my $seqObj (@{$genomeObj->{contigs}})
+    {
+	if ($seqObj->{genbank_locus}->{definition}=~/chromosome|complete genome/i)
+	{
+	    $chromosomes++;
+	} elsif ($seqObj->{genbank_locus}->{definition}=~/plasmid/i)
+	{
+	    $plasmids++;
+	} else
+	{
+	    $contigs++;
+	}
+	
+	$sequences++;
+	$genome_length += length($seqObj->{dna});
+	$gc_count += $seqObj->{dna}=~tr/GCgc//;
+	
+	if ($sequences == 1){
+	    foreach my $dblink (@{$seqObj->{genbank_locus}->{dblink}}){
+		$genome->{bioproject_accession} = $1 if $dblink=~/BioProject:\s*(.*)/;
+		$genome->{biosample_accession} = $1 if $dblink=~/BioSample:\s*(.*)/;
+	    }
+	    foreach my $reference (@{$seqObj->{genbank_locus}->{references}}){
+		$genome->{publication} .= $reference->{PUBMED}."," unless $genome->{publication}=~/$reference->{PUBMED}/;
+	    }
+	    $genome->{publication}=~s/,*$//g;
+	    $genome->{completion_date} = strftime "%Y-%m-%dT%H:%M:%SZ", localtime str2time($seqObj->{genbank_locus}->{date}) if $seqObj->{genbank_locus}->{date};
+	}
+	
+	if ($seqObj->{genbank_locus}->{accession}[0]=~/^([A-Z]{4})\d{8}$/){ # wgs, capture only master accession
+	    $genome->{genbank_accessions} .= $1."00000000" unless $genome->{genbank_accessions}=~/$1.0000000/;
+	}else{
+	    $genome->{genbank_accessions} .= $seqObj->{genbank_locus}->{accession}[0].",";
+	}
+	
+    }
+    $genome->{genbank_accessions}=~s/,*$//g;
+    
+    $genome->{chromosomes} = $chromosomes if $chromosomes;
+    $genome->{plasmids} = $plasmids if $plasmids;
+    $genome->{contigs} = $contigs if $contigs ;
+    $genome->{sequences} = $sequences;
+    $genome->{genome_length} = $genome_length;
+    $genome->{gc_content} = sprintf("%.2f", ($gc_count*100/$genome_length));
+    $genome->{genome_status} = ($contigs > 1)? "WGS": "Complete";
+
+    return $genome;
+}
+
+
