@@ -9,6 +9,7 @@ use SeedUtils;
 use gjoseqlib;
 use Date::Parse;
 use POSIX;
+use DB_File;
 
 use Bio::KBase::GenomeAnnotation::Client;
 use JSON::XS;
@@ -54,6 +55,7 @@ my($opt, $usage) = describe_options("%c %o format",
 				    ["input|i=s", "Input file"],
 				    ["output|o=s", "Output file"],
 				    ["with-headings", "For downloads with optional headings (feature_data) include headings"],
+				    ["specialty-gene-lookup-db=s", "Use this reference database for exporting spgene data"],
 				    ["help|h", "Show this help message"],
 				    [],
 				    ["Supported formats:\n"],
@@ -686,6 +688,14 @@ sub export_patric_specialty_genes
 {
     my($genomeTO, $out_fh) = @_;
 
+    my %lookup;
+
+    if ($opt->specialty_gene_lookup_db)
+    {
+	tie %lookup, "DB_File", $opt->specialty_gene_lookup_db, O_RDONLY, 0, $DB_HASH
+	    or warn "Could not tie specialty gene lookup database " . $opt->specialty_gene_lookup_db . ": $!";
+    }
+
     my @headings = qw(genome_name patric_id refseq_locus_tag alt_locus_tag gene product property source
 		      evidence source_id organism function classification pmid query_coverage subject_coverage
 		      identity e_value);
@@ -714,6 +724,13 @@ sub export_patric_specialty_genes
 
 	    $dbid =~ s/^$db\|//;
 
+	    my $ltxt = $lookup{$db, $dbid};
+	    my $ldat = {};
+	    if ($ltxt)
+	    {
+		$ldat = decode_json($ltxt);
+	    }
+
 	    $dat{source} = $db;
 	    $dat{evidence} = 'BLASTP';
 	    $dat{source_id} = $dbid;
@@ -739,6 +756,11 @@ sub export_patric_specialty_genes
 		    $dat{gene} = $v;
 		}
 	    }
+
+	    $dat{gene} = $ldat->{gene_name} if $ldat->{gene_name};
+	    $dat{property} = $ldat->{property};
+	    $dat{classification} = $ldat->{classification};
+	    $dat{pmid} = $ldat->{pmid};
 
 	    print $out_fh join("\t", @dat{@headings}), "\n";
 	}
