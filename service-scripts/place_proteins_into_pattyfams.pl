@@ -107,7 +107,11 @@ else
     if ($res->is_success)
     {
 	my $txt = $res->content;
-	($genus) = $txt =~ /(\d+)/;
+	#
+	# Work around broken kser.
+	#
+	my @lines = split(/\n/, $txt);
+	($genus) = $lines[-1] =~ /(\d+)/;
     }
     else
     {
