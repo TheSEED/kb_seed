@@ -48,7 +48,13 @@ our %family_type_to_sql = (plfam => "L",
 
 our %typemap = (CDS => 'peg');
 
-our $token_path = "$ENV{HOME}/.patric_token";
+our $token_path;
+if ($^O eq 'MSWin32')
+{
+    $token_path = "$ENV{HOMEDRIVE}$ENV{HOMEPATH}/.patric_token";
+} else {
+    $token_path = "$ENV{HOME}/.patric_token";
+}
 
 use warnings 'once';
 

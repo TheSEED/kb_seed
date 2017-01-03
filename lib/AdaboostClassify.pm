@@ -4,7 +4,8 @@ package AdaboostClassify;
 
 use strict;
 use gjoseqlib;
-use AdaboostClassifierAMRv1;
+#use AdaboostClassifierAMRv1;
+use Nov_2016_AMR_Classifiers;
 use Getopt::Long;
 use Data::Dumper;
 use BlastInterface;
@@ -38,12 +39,22 @@ sub classify
 {
     my($self, $sci_name, $contigs) = @_;
 
-    my %blast_opts = (minIden       => 1,
+    my %blast_opts = ( evalue        => 0.1,
+		      perc_identity => 1,
+		      minIden       => 1,
 		      minCovQ       => 1,
 		      lcFilter      => "F",
-		      num_threads   => $self->{threads},
-		      );
-
+		      word_size     => 7,
+		      reward        => 1,
+		      penalty       => -3,
+		      num_threads   => 8);         
+    
+#    my %blast_opts = (minIden       => 1,
+#		      minCovQ       => 1,
+#		      lcFilter      => "F",
+#		      num_threads   => $self->{threads},
+#		     );
+    
     my $contig_file;
     
     if (ref($contigs) eq 'GLOB')
@@ -60,14 +71,15 @@ sub classify
     {
 	$contig_file = $contigs;
     }
-
+    
     #Get the Classifier Hash
-    my $adaH = \%AdaboostClassifierAMRv1::AdaboostValues;
-
+    # my $adaH = \%AdaboostClassifierAMRv1::AdaboostValues;
+    my $adaH = \%Nov_2016_AMR_Classifiers::AdaboostValues;
+    
     my $all_classifiers = $adaH->{$sci_name};
-
+    
     my @result;
-
+    
     foreach my $classifier (sort keys %$all_classifiers)
     {
 	my $features = [];
@@ -80,7 +92,7 @@ sub classify
 	{
 	    my $alpha = $adaH->{$sci_name}->{$classifier}->{'ADABOOST'}->{$round}->{ALPHA};
 	    my $kmerA = $adaH->{$sci_name}->{$classifier}->{'ADABOOST'}->{$round}->{KMERS};
-
+	    
 	    #print STDERR  "##$round\t$alpha\n";
 	    my @for_blast;
 	    my $count = 0;
@@ -176,7 +188,7 @@ sub classify
 
 	push(@result, {
 	    classifier => $classifier,
-	    adaboost_score => $adaboost_score,
+	    cumulative_adaboost_score => $adaboost_score,
 	    antibiotic => $antibiotic,
 	    sensitivity => $what,
 	    ($comment ? (comment => $comment) : ()),
