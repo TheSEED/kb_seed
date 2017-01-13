@@ -480,6 +480,27 @@ sub retrieve_contigs_in_genomes {
 
 }
 
+sub retrieve_contigs_in_genome_to_temp {
+    my ($self, $genome_id) = @_;
+
+    my $temp = File::Temp->new();
+    
+    $self->query_cb("genome_sequence",
+		    sub {
+			my ($data) = @_;
+			for my $ent (@$data) {
+			    print_alignment_as_fasta($temp, 
+						     ["accn|$ent->{sequence_id}",
+						      "$ent->{description} [ $ent->{genome_name} | $ent->{genome_id} ]",
+						      $ent->{sequence}]);
+			}
+		    },
+		    [ "eq", "genome_id", $genome_id ]
+		   );
+    close($temp);
+    return($temp);
+}
+
 sub compute_contig_md5s_in_genomes {
     my ( $self, $genome_ids ) = @_;
 
