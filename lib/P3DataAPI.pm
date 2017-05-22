@@ -310,8 +310,8 @@ sub solr_query_raw
     my($s, $e);
     if ($self->debug)
     {
-	$s = gettimeofday;
-	print STDERR "SQ: $uri " . join(" ", map { "$_ = '$params{$_}'" } sort keys %params), "\n";
+        $s = gettimeofday;
+        print STDERR "SQ: $uri " . join(" ", map { "$_ = '$params{$_}'" } sort keys %params), "\n";
     }
     # print STDERR "Query url: $uri\n";
     my $res = $self->ua->post($uri,
@@ -322,9 +322,9 @@ sub solr_query_raw
                             );
     if ($self->debug)
     {
-	my $e = gettimeofday;
-	my $elap = $e - $s;
-	print STDERR "Done elap=$elap\n";
+        my $e = gettimeofday;
+        my $elap = $e - $s;
+        print STDERR "Done elap=$elap\n";
     }
     if ($res->is_success)
     {
@@ -394,21 +394,22 @@ sub solr_query_raw_multi
             my $doc = decode_json($res->content);
             # print Dumper($res,$doc);
 
-	    if (ref($doc) eq 'HASH')
-	    {
-		my $resp = $doc->{response};
-		my $ndocs = @{$resp->{docs}};
+            if (ref($doc) eq 'HASH')
+            {
+                my $resp = $doc->{response};
+                my $ndocs = @{$resp->{docs}};
 
-		$out[$n] = $resp->{docs};
-	    }
-	    else
-	    {
-		$out[$n] = [];
-		print STDERR "Empty response for $n: " . Dumper($doc) . "\n";
-	    }
+                $out[$n] = $resp->{docs};
+            }
+            else
+            {
+                $out[$n] = [];
+                print STDERR "Empty response for $n: " . Dumper($doc) . "\n";
+            }
         }
         else
         {
+            no warnings 'once';
             warn "Query failed: " . $res->code . " " . $res->content . "\n" . "error=$Net::HTTPS::NB::HTTPS_ERROR\n";
         }
     }
@@ -484,19 +485,19 @@ sub retrieve_contigs_in_genome_to_temp {
     my ($self, $genome_id) = @_;
 
     my $temp = File::Temp->new();
-    
+
     $self->query_cb("genome_sequence",
-		    sub {
-			my ($data) = @_;
-			for my $ent (@$data) {
-			    print_alignment_as_fasta($temp, 
-						     ["accn|$ent->{sequence_id}",
-						      "$ent->{description} [ $ent->{genome_name} | $ent->{genome_id} ]",
-						      $ent->{sequence}]);
-			}
-		    },
-		    [ "eq", "genome_id", $genome_id ]
-		   );
+                    sub {
+                        my ($data) = @_;
+                        for my $ent (@$data) {
+                            print_alignment_as_fasta($temp,
+                                                     ["accn|$ent->{sequence_id}",
+                                                      "$ent->{description} [ $ent->{genome_name} | $ent->{genome_id} ]",
+                                                      $ent->{sequence}]);
+                        }
+                    },
+                    [ "eq", "genome_id", $genome_id ]
+                   );
     close($temp);
     return($temp);
 }
@@ -569,6 +570,44 @@ sub retrieve_protein_features_in_genomes {
         print $id_map_fh join( "\t", $k, @$v ), "\n";
     }
     close($id_map_fh);
+}
+
+#
+# Side effect, returns list of features and family/function data.
+#
+sub retrieve_protein_features_in_genomes_to_temp {
+    my ( $self, $genome_ids ) = @_;
+
+    my $temp = File::Temp->new();
+
+    my %map;
+
+    my $ret_list;
+    $ret_list = [] if wantarray;
+
+    for my $gid (@$genome_ids) {
+        $self->query_cb(
+            "genome_feature",
+            sub {
+                my ($data) = @_;
+                for my $ent (@$data) {
+                    print_alignment_as_fasta($temp,
+                                             [
+                                              $ent->{patric_id}, $ent->{product},
+                                              $ent->{aa_sequence}
+                                              ]
+                                            );
+                    push(@$ret_list, [@$ent{qw(patric_id product plfam_id pgfam_id)}]) if $ret_list;
+                }
+            },
+            [ "eq",     "feature_type", "CDS" ],
+             [ "eq", "annotation", "PATRIC"],
+            [ "eq",     "genome_id",    $gid ],
+            [ "select", "patric_id,product,aa_sequence,plfam_id,pgfam_id" ],
+        );
+    }
+    close($temp);
+    return wantarray ? ($temp, $ret_list) : $temp;
 }
 
 sub retrieve_protein_features_with_role {
@@ -815,19 +854,19 @@ sub compare_regions_for_peg
     {
         print STDERR "$peg rep filter\n";
         $genome_filter = sub { $self->is_reference_genome($_[0]) eq 'Representative' };
-	$solr_filter = $self->representative_genome_filter();
+        $solr_filter = $self->representative_genome_filter();
     }
     elsif ($genome_filter_str eq 'reference')
     {
         print STDERR "$peg ref filter\n";
         $genome_filter = sub { $self->is_reference_genome($_[0]) eq 'Reference' };
-	$solr_filter = $self->reference_genome_filter();
+        $solr_filter = $self->reference_genome_filter();
     }
     elsif ($genome_filter_str eq 'representative+reference')
     {
         print STDERR "$peg repref filter\n";
         $genome_filter = sub { $self->is_reference_genome($_[0]) ne '' };
-	$solr_filter = $self->representative_reference_genome_filter();
+        $solr_filter = $self->representative_reference_genome_filter();
     }
 
     my @pin = $self->get_pin($peg, $coloring_method, $n_genomes, $genome_filter, $solr_filter);
@@ -881,37 +920,37 @@ sub compare_regions_for_peg
 
     if (0)
     {
-	# mysql families
-	my @all_fids;
-	for my $gir (@genes_in_region_response)
-	{
-	    my($reg) = @$gir;
-	    for my $fent (@$reg)
-	    {
-		push(@all_fids, $fent->{patric_id});
-	    }
-	}
-	$all_families = $self->family_of_bulk_mysql(\@all_fids);
+        # mysql families
+        my @all_fids;
+        for my $gir (@genes_in_region_response)
+        {
+            my($reg) = @$gir;
+            for my $fent (@$reg)
+            {
+                push(@all_fids, $fent->{patric_id});
+            }
+        }
+        $all_families = $self->family_of_bulk_mysql(\@all_fids);
     }
     else
     {
-	# p3 families
+        # p3 families
 
-	for my $gir (@genes_in_region_response)
-	{
-	    my($reg) = @$gir;
-	    for my $fent (@$reg)
-	    {
-		if (my $i = $fent->{pgfam_id})
-		{
-		    $all_families->{$fent->{patric_id}}->{pgfam} = [$i, ''];
-		}
-		if (my $i = $fent->{plfam_id})
-		{
-		    $all_families->{$fent->{patric_id}}->{plfam} = [$i, ''];
-		}
-	    }
-	}
+        for my $gir (@genes_in_region_response)
+        {
+            my($reg) = @$gir;
+            for my $fent (@$reg)
+            {
+                if (my $i = $fent->{pgfam_id})
+                {
+                    $all_families->{$fent->{patric_id}}->{pgfam} = [$i, ''];
+                }
+                if (my $i = $fent->{plfam_id})
+                {
+                    $all_families->{$fent->{patric_id}}->{plfam} = [$i, ''];
+                }
+            }
+        }
     }
 
     for my $pin_row (0..$#pin)
@@ -979,20 +1018,20 @@ sub compare_regions_for_peg
             {
                 my($fam, $fun) = @{$all_families->{$fid}->{$fname}};
                 my($ital_start, $ital_end) = ("","");
-		my $funstr = '';
-		if ($fun)
-		{
-		    if ($fun ne $fent->{product})
-		    {
-			$ital_start = "<i>";
-			$ital_end = "</i>";
-		    }
-		    $funstr = "$fam: $ital_start$fun$ital_end";
-		}
-		else
-		{
-		    $funstr = $fam;
-		}
+                my $funstr = '';
+                if ($fun)
+                {
+                    if ($fun ne $fent->{product})
+                    {
+                        $ital_start = "<i>";
+                        $ital_end = "</i>";
+                    }
+                    $funstr = "$fam: $ital_start$fun$ital_end";
+                }
+                else
+                {
+                    $funstr = $fam;
+                }
                 push(@$attrs, [$fname, $funstr]);
             }
 
@@ -1273,34 +1312,34 @@ sub get_pin_mysql
 
     while (@to_query)
     {
-	my @q = splice(@to_query, 0, 500);
+        my @q = splice(@to_query, 0, 500);
 
-	my $fidq = join(" OR ", map { "\"$_\"" } @q);
-	$sres = $self->solr_query("genome_feature",
-			      { q => "patric_id:($fidq)",
-				    fl => "patric_id,aa_sequence,accession,start,end,genome_id,genome_name,strand" });
-	#
-	# PATRIC stores start/end as left/right. Change to the SEED meaning.
-	#
-	# die Dumper($sres);
+        my $fidq = join(" OR ", map { "\"$_\"" } @q);
+        $sres = $self->solr_query("genome_feature",
+                              { q => "patric_id:($fidq)",
+                                    fl => "patric_id,aa_sequence,accession,start,end,genome_id,genome_name,strand" });
+        #
+        # PATRIC stores start/end as left/right. Change to the SEED meaning.
+        #
+        # die Dumper($sres);
 
-	for my $ent (@$sres)
-	{
-	    if ($ent->{patric_id} eq $fid)
-	    {
-		$me = $ent;
-	    }
-	    else
-	    {
-		push(@out, $ent);
-	    }
-	    my ($left, $right) = @$ent{'start', 'end'};
-	    if ($ent->{strand} eq '-')
-	    {
-		$ent->{start} = $right;
-		$ent->{end} = $left;
-	    }
-	}
+        for my $ent (@$sres)
+        {
+            if ($ent->{patric_id} eq $fid)
+            {
+                $me = $ent;
+            }
+            else
+            {
+                push(@out, $ent);
+            }
+            my ($left, $right) = @$ent{'start', 'end'};
+            if ($ent->{strand} eq '-')
+            {
+                $ent->{start} = $right;
+                $ent->{end} = $left;
+            }
+        }
     }
 
     return ($me, @out);
@@ -1422,22 +1461,22 @@ sub family_of_bulk
     my $out = {};
     while (@fids)
     {
-	my @batch = splice(@fids, 0, 1000);
+        my @batch = splice(@fids, 0, 1000);
 
-	my $fidq = join(" OR ", map { "\"$_\"" } @batch);
+        my $fidq = join(" OR ", map { "\"$_\"" } @batch);
 
-	my $res = $self->solr_query("genome_feature",
-				{
-				    q => "patric_id:($fidq)",
-				    fl => "patric_id,$fam_field",
-				});
-	if (@$res)
-	{
-	    for my $r (@$res)
-	    {
-		$out->{$r->{patric_id}} = $r->{$fam_field};
-	    }
-	}
+        my $res = $self->solr_query("genome_feature",
+                                {
+                                    q => "patric_id:($fidq)",
+                                    fl => "patric_id,$fam_field",
+                                });
+        if (@$res)
+        {
+            for my $r (@$res)
+            {
+                $out->{$r->{patric_id}} = $r->{$fam_field};
+            }
+        }
     }
 
     return $out;
@@ -1718,6 +1757,10 @@ sub gto_of {
                 if ( ref( $f->{uniprotkb_accession} ) ) {
                     push( @aliases, @{ $f->{uniprotkb_accession} } );
                 }
+                my @familyList;
+                if ($f->{pgfam_id}) {
+                    @familyList = (['PGF', $f->{pgfam_id}]);
+                }
                 $retVal->add_feature(
                     {
                         -annotator           => "PATRIC",
@@ -1728,6 +1771,7 @@ sub gto_of {
                         -function            => $f->{product},
                         -protein_translation => $f->{aa_sequence},
                         -aliases             => \@aliases,
+                        -family_assignments => \@familyList
                     }
                 );
                 $fids{$fid} = 1;
@@ -1739,6 +1783,43 @@ sub gto_of {
     return $retVal;
 }
 
+=head3 fasta_of
+
+    my $triples = $d->fasta_of($genomeID);
+
+Return a set of contig triples for the specified genome. Each triple is [id, comment, sequence].
+
+=over 4
+
+=item genomeID
+
+ID of the source genome.
+
+=item RETURN
+
+Returns a reference to a list of 3-tuples, one per contig in the genome. Each tuple consists of (0) an ID, (1)
+an empty string (comment), and (2) the contig DNA sequence.
+
+=back
+
+=cut
+
+sub fasta_of {
+    my ( $self, $genomeID ) = @_;
+    my $retVal;
+
+    # Get the contigs.
+    my @contigs = $self->query(
+        "genome_sequence",
+        [ "eq",     "genome_id",   $genomeID ],
+        [ "select", "sequence_id", "sequence" ]
+    );
+    # Create the triples.
+    my @retVal = map { [$_->{sequence_id}, '', $_->{sequence}] } @contigs;
+    # Return the list of triples.
+    return \@retVal;
+}
+
 sub is_reference_genome
 {
     my($self, $genome) = @_;
@@ -1746,7 +1827,7 @@ sub is_reference_genome
     my $cache = $self->reference_genome_cache;
     if (!$cache)
     {
-	$cache = $self->fill_reference_gene_cache();
+        $cache = $self->fill_reference_gene_cache();
     }
 
     return $cache->{$genome}->{reference_genome};
@@ -1759,7 +1840,7 @@ sub representative_reference_genome_filter
     my $cache = $self->reference_genome_cache;
     if (!$cache)
     {
-	$cache = $self->fill_reference_gene_cache();
+        $cache = $self->fill_reference_gene_cache();
     }
     my @list = grep { $cache->{$_} ne '' } keys %$cache;
     return "genome_id:(" . join(" OR ", @list) . ")";
@@ -1772,9 +1853,9 @@ sub representative_genome_filter
     my $cache = $self->reference_genome_cache;
     if (!$cache)
     {
-	$cache = $self->fill_reference_gene_cache();
+        $cache = $self->fill_reference_gene_cache();
     }
-    my @list = grep { $cache->{$_} eq 'Representative' } keys %$cache;
+    my @list = grep { $cache->{$_}->{reference_genome} eq 'Representative' } keys %$cache;
     return "genome_id:(" . join(" OR ", @list) . ")";
 }
 
@@ -1785,9 +1866,9 @@ sub reference_genome_filter
     my $cache = $self->reference_genome_cache;
     if (!$cache)
     {
-	$cache = $self->fill_reference_gene_cache();
+        $cache = $self->fill_reference_gene_cache();
     }
-    my @list = grep { $cache->{$_} eq 'Reference' } keys %$cache;
+    my @list = grep { $cache->{$_}->{reference_genome} eq 'Reference' } keys %$cache;
     return "genome_id:(" . join(" OR ", @list) . ")";
 }
 

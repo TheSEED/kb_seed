@@ -22,6 +22,7 @@ package P3Utils;
     use strict;
     use warnings;
     use Getopt::Long::Descriptive;
+    use Data::Dumper;
 
 =head1 PATRIC Script Utilities
 
@@ -50,7 +51,7 @@ use constant FIELDS =>  {   genome => ['genome_id', 'genome_name', 'taxon_id', '
                             feature => ['patric_id', 'feature_type', 'location', 'product'],
                             family => ['family_id', 'family_type', 'family_product'],
                             genome_drug => ['genome_id', 'antibiotic', 'resistant_phenotype'],
-                            contig => ['genome_id', 'accession'] };
+                            contig => ['genome_id', 'accession', 'length', 'taxon_id', 'sequence'] };
 
 =head3 IDCOL
 
@@ -125,13 +126,18 @@ TRUE. The default is C<0>, which indicates the last column.
 Maximum number of lines to read in a batch. The default is C<100>. This option is only present if the B<$colFlag>
 parameter is TRUE.
 
+=item nohead
+
+Input file has no headers.
+
 =back
 
 =cut
 
 sub col_options {
     return (['col|c=s', 'column number (1-based) or name', { default => 0 }],
-                ['batchSize|b=i', 'input batch size', { default => 100 }]);
+                ['batchSize|b=i', 'input batch size', { default => 100 }],
+                ['nohead', 'file has no headers']);
 }
 
 =head3 get_couplets
@@ -180,10 +186,8 @@ sub get_couplets {
         while (! eof $ih && $count < $batchSize) {
             # Read the next line.
             my $line = <$ih>;
-            # Remove the EOL.
-            $line =~ s/[\r\n]+$//;
             # Split the line into fields.
-            my @fields = split /\t/, $line;
+            my @fields = get_fields($line);
             # Extract the key column.
             my $key = $fields[$colNum];
             # Store the couplet.
@@ -228,10 +232,8 @@ sub get_col {
     while (! eof $ih) {
         # Read the next line.
         my $line = <$ih>;
-        # Remove the EOL.
-        $line =~ s/[\r\n]+$//;
         # Split the line into fields.
-        my @fields = split /\t/, $line;
+        my @fields = get_fields($line);
         # Extract the key column.
         push @retVal, $fields[$colNum];
     }
@@ -251,11 +253,14 @@ Read the header line from a tab-delimited input, format the output headers and c
 
 Open input file handle.
 
-=item opt (optional)
+=item opt
 
-If specified, should be a L<Getopts::Long::Descriptive::Opt> object containing the specifications for the key
-column or a string containing the key column name. If this parameter is undefined or omitted, it will be presumed
-there is no key column.
+Should be a L<Getopts::Long::Descriptive::Opt> object containing the specifications for the key
+column or a string containing the key column name. At a minimum, it must support the C<nohead> option.
+
+=item keyless
+
+If TRUE, then it is presumed there is no key column.
 
 =item RETURN
 
@@ -267,18 +272,21 @@ column. If there is no key column, the second element of the list will be undefi
 =cut
 
 sub process_headers {
-    my ($ih, $opt) = @_;
+    my ($ih, $opt, $keyless) = @_;
     # Read the header line.
-    my $line = <$ih>;
-    die "Input file is empty.\n" if (! defined $line);
-    # Remove the EOL characters.
-    $line =~ s/[\r\n]+$//;
+    my $line;
+    if ($opt->nohead) {
+        $line = '';
+    } else {
+        $line = <$ih>;
+        die "Input file is empty.\n" if (! defined $line);
+    }
     # Split the line into fields.
-    my @outHeaders = split /\t/, $line;
+    my @outHeaders = get_fields($line);
     # This will contain the key column number.
     my $keyCol;
     # Search for the key column.
-    if (defined $opt) {
+    if (! $keyless) {
         my $col;
         if (ref $opt) {
             $col = $opt->col;
@@ -781,7 +789,19 @@ Open output file handle. The default is the standard output.
 sub print_cols {
     my ($cols, $oh) = @_;
     $oh //= \*STDOUT;
-    print $oh join("\t", @$cols) . "\n";
+
+    my @r;
+    for my $r (@$cols) {
+        if (! defined $r) {
+            push(@r, '')
+        } elsif (ref($r) eq "ARRAY") {
+            my $a = join(",", @{$r});
+            push(@r, $a);
+        } else {
+            push(@r, $r);
+        }
+    }
+    print $oh join("\t", @r) . "\n";
 }
 
 
@@ -936,8 +956,7 @@ sub find_headers {
     my ($ih, $fileType, @fields) = @_;
     # Read the column headers from the file.
     my $line = <$ih>;
-    $line =~ s/[\r\n]+$//;
-    my @headers = split /\t/, $line;
+    my @headers = get_fields($line);
     # Get a hash of the field names.
     my %fieldH = map { $_ => undef } @fields;
     # Loop through the headers, saving indices.
@@ -994,12 +1013,43 @@ sub get_cols {
     my ($ih, $cols) = @_;
     # Read the input line.
     my $line = <$ih>;
-    $line =~ s/[\r\n]+$//;
     # Get the columns.
-    my @fields = split /\t/, $line;
+    my @fields = get_fields($line);
     # Extract the ones we want.
     my @retVal = map { $fields[$_] } @$cols;
     # Return the resulting values.
+    return @retVal;
+}
+
+=head3 get_fields
+
+    my @fields = P3Utils::get_fields($line);
+
+Split a tab-delimited line into fields.
+
+=over 4
+
+=item line
+
+Input line to split.
+
+=item RETURN
+
+Returns a list of the fields in the line.
+
+=back
+
+=cut
+
+sub get_fields {
+    my ($line) = @_;
+    # Split the line.
+    my @retVal = split /\t/, $line;
+    # Remove the EOL.
+    if (@retVal) {
+        $retVal[$#retVal] =~ s/[\r\n]+$//;
+    }
+    # Return the fields.
     return @retVal;
 }
 

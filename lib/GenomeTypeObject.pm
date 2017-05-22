@@ -66,6 +66,7 @@ use IDclient;
 use BasicLocation;
 use IO::Handle;
 use Data::Dumper;
+use SeedUtils qw();
 
 our $have_unbless;
 eval {
@@ -468,17 +469,17 @@ sub update_feature_index
         my $nftr = @{$self->features};
         my $nind = keys %$feature_index;
 
-	my %seen;
-	$seen{$_->{id}}++ foreach @{$self->features};
-	my @dups = grep { $seen{$_} > 1 } keys %seen;
-	my $n = 10;
-	my $extra = '';
-	if (@dups > $n)
-	{
-	    $#dups = $n-1;
-	    $extra = "...";
-	}
-	my $ndups = @dups;
+        my %seen;
+        $seen{$_->{id}}++ foreach @{$self->features};
+        my @dups = grep { $seen{$_} > 1 } keys %seen;
+        my $n = 10;
+        my $extra = '';
+        if (@dups > $n)
+        {
+            $#dups = $n-1;
+            $extra = "...";
+        }
+        my $ndups = @dups;
 
         die "Number of features ($nftr) not equal to index size ($nind). $ndups duplicate ids: \n@dups$extra";
     }
@@ -789,7 +790,7 @@ that feature type.
 #
 #   -id                      =>  $ftr_id
 #   -id_client               =>  $id_client_object
-#   -id_prefix               =>  $id_prefix       
+#   -id_prefix               =>  $id_prefix
 #   -id_type                 =>  $type            #  D = $ftr_type
 #
 sub add_feature
@@ -1453,10 +1454,10 @@ sub sorted_features
     my @f = sort {
         my($ac, $apos, $atype) = sort_position($a);
         my($bc, $bpos, $btype) = sort_position($b);
-	($contig_order{$ac} <=> $contig_order{$bc}) or
-	    $apos <=> $bpos or
-		($atype cmp $btype) 
-		} @{$self->{features}};
+        ($contig_order{$ac} <=> $contig_order{$bc}) or
+            $apos <=> $bpos or
+                ($atype cmp $btype)
+                } @{$self->{features}};
     return wantarray ? @f : \@f;
 }
 
@@ -1483,17 +1484,17 @@ sub renumber_features
 
         my($c, $left, $type) = sort_position($f);
 
-	my $id;
-	if (exists $next_id{$type})
-	{
-	    $id = $next_id{$type}++;
-	}
-	else
-	{
-	    $id = 1;
-	    $next_id{$type} = 2;
-	}
-	    
+        my $id;
+        if (exists $next_id{$type})
+        {
+            $id = $next_id{$type}++;
+        }
+        else
+        {
+            $id = 1;
+            $next_id{$type} = 2;
+        }
+
         if ($f->{id} =~ /(.*\.)(\d+)$/)
         {
             my $new_id = $1 . $id;
@@ -1858,9 +1859,140 @@ sub flattened_feature_aliases
     my @aliases = ref($feature->{aliases}) ? @{$feature->{aliases}} : ();
     if (ref($feature->{alias_pairs}))
     {
-	push(@aliases, map { join(":", @$_) } @{$feature->{alias_pairs}});
+        push(@aliases, map { join(":", @$_) } @{$feature->{alias_pairs}});
     }
     return @aliases;
+}
+
+=head3 metrics
+
+    my $metricHash = $gto->metrics();
+
+Return a hash of metrics about this GTO. The metrics returned will include N50, N70, N90, total DNA length, and
+probable completeness.
+
+=over 4
+
+=item RETURN
+
+Returns a reference to a hash with the following keys.
+
+=over 8
+
+=item N50
+
+The N50 of the contig lengths (see L</n_metric>).
+
+=item N70
+
+The N70 of the contig lengths.
+
+=item N90
+
+The N90 of the contig lengths.
+
+=item totlen
+
+The total DNA length.
+
+=item complete
+
+C<1> if the genome is mostly complete, else C<0>.
+
+=back
+
+=back
+
+=cut
+
+sub metrics {
+    my ($self) = @_;
+    # Run through the contigs, collecting lengths.
+    my $contigs = $self->{contigs};
+    my $totLen = 0;
+    my @lens;
+    for my $contig (@$contigs) {
+        my $dnaLength = length $contig->{dna};
+        $totLen += $dnaLength;
+        push @lens, $dnaLength;
+    }
+    # Compute the metrics.
+    my $retVal = SeedUtils::compute_metrics(\@lens, $totLen);
+    # Return the hash.
+    return $retVal;
+}
+
+
+=head3 n_metric
+
+    my $length = $gto->n_metric($thresh);
+
+Compute the NI<XX> metric for the contig lengths, where I<XX> is a percentage (usually 50, 70, or 90). A higher value
+for the metric indicates a higher-quality assembly. The N70 metric is the length of the shortest contig in the set of
+longest contigs comprising 70% of the total contig lengths. Similarly, the N50 metric is the length of the shortest contig
+in the set of longest contigs comprising 50% of the total contig lengths.
+
+=over 4
+
+=item thresh
+
+The threshold to use for the desired metric. For example, specify C<70> for an N70 metric.
+
+=item RETURN
+
+Returns the length of the contig at the desired metric level.
+
+=back
+
+=cut
+
+sub n_metric {
+    my ($self, $thresh) = @_;
+    # Run through the contigs, collecting lengths.
+    my $contigs = $self->{contigs};
+    my $totLen = 0;
+    my @lens;
+    for my $contig (@$contigs) {
+        my $dnaLength = length $contig->{dna};
+        $totLen += $dnaLength;
+        push @lens, $dnaLength;
+    }
+    # Sort the contig lengths from longest to shortest.
+    @lens = sort { $b <=> $a } @lens;
+    # We accumulate the contig length as we go through the sorted list until we break the
+    # threshold.
+    my $threshold = $thresh * $totLen / 100;
+    my $cumul = 0;
+    my $retVal = 0;
+    for my $len (@lens) {
+        $cumul += $len;
+        $retVal = $len;
+        last if ($cumul >= $threshold);
+    }
+    # Return the length found.
+    return $retVal;
+}
+
+sub is_complete {
+    my ($self) = @_;
+    # Run through the contigs, computing the total length.
+    my $contigs = $self->{contigs};
+    my $totLen = 0;
+    for my $contig (@$contigs) {
+        my $dnaLength = length $contig->{dna};
+        $totLen += $dnaLength;
+    }
+    # We can only be complete if the total length is 300K or more.
+    my $retVal = 0;
+    if ($totLen >= 300000) {
+        # Compute the N70.
+        my $metric = $self->n_metric(70);
+        # We are complete if the N70 is 20K or more than.
+        if ($metric >= 20000) {
+            $retVal = 1;
+        }
+    }
+    return $retVal;
 }
 
 1;

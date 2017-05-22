@@ -170,6 +170,23 @@ my %contig_offset;
 
 my $species;
 my @tax = split(/;\s+/, $genomeTO->{taxonomy});
+#
+# To avoid issues with EMBL exports on long taxonomies, truncate
+# any field in the taxonomy to 74 chars.
+#
+if (lc($format) eq 'embl')
+{
+    for my $t (@tax)
+    {
+	if ((my $l = length($t)) > 73)
+	{
+	    
+	    $t = substr($t, 0, 73);
+	    print STDERR "EMBL export: truncating long taxonomy string (length=$l) to $t\n";
+	}
+    }
+}
+
 if (@tax)
 {
     $species = Bio::Species->new(-classification => [reverse @tax]);
@@ -294,6 +311,7 @@ my %protein_type = (CDS => 1, peg => 1);
 my $strip_ec;
 my $gff_export = [];
 
+my @features;
 for my $f (@{$genomeTO->{features}})
 {
     next unless &$feature_type_ok($f);
@@ -509,19 +527,25 @@ for my $f (@{$genomeTO->{features}})
     {
 	print STDERR "No contig found for $contig on $feature\n";
     }
+    # hack for gtf via bioperl push(@features, $feature) if $feature;
 }
 
 # check for FeatureIO or SeqIO
 if ($format eq "GTF") {
-    #my $fio = Bio::FeatureIO->new(-file => ">$filename", -format => "GTF");
-    #foreach my $feature (@$bio2) {
-    #$fio->write_feature($feature);
-    #}
-    print $out_fh "##gff-version 3\n";
-    foreach (@$gff_export) {
-	print $out_fh $_;
+    if (0)
+    {
+	my $fio = Bio::FeatureIO->newFh(-fh => $out_fh, -format => "GTF");
+	foreach my $feature (@features) {
+	    $fio->write_feature($feature);
+	}
     }
-    
+    else
+    {
+	print $out_fh "##gff-version 3\n";
+	foreach (@$gff_export) {
+	    print $out_fh $_;
+	}
+    }
 } else {
 #	my $sio = Bio::SeqIO->new(-file => ">$filename", -format => $format);
 

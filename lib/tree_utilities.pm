@@ -449,7 +449,7 @@ sub parse_newick_treeR {
 	$$offP++;
 	&skip_white($sP,$offP);
 	$c = substr($$sP,$$offP,1);
-	while ($c =~ /[0-9-+e\.]/)
+	while ($c =~ /[0-9-+eE\.]/)
 	{
 	    $brlen .= $c;
 	    $$offP++;

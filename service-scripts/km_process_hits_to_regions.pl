@@ -131,6 +131,7 @@ sub process_merged {
 	    # print STDERR "Merge 1 $left->[0] $left->[2] and $right->[0] $right->[2]\n";
 	    $collapsed[-1]->[2] = $merged[$i]->[2];
 	    $collapsed[-1]->[5] += $merged[$i]->[5];
+	    $collapsed[-1]->[8] += $merged[$i]->[8];
 	    $i++;
 	}
     }
@@ -163,6 +164,7 @@ sub process_merged {
 	    # print STDERR "Merge 2 $left->[0] $left->[2] and $right->[0] $right->[2]\n";
 	    $merged[-1]->[2]  = $collapsed[$i+1]->[2];
 	    $merged[-1]->[5] += $collapsed[$i+1]->[5];
+	    $merged[-1]->[8] += $collapsed[$i+1]->[8];
 	    $i += 2;
 	}
     }

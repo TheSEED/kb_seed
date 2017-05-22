@@ -18,6 +18,7 @@
 ########################################################################
 
 # usage:  svr_genbank_to_seed  OrgDir genbank.file
+my $usage = "svr_genbank_to_seed  OrgDir genbank.file";
 
 use strict;
 use warnings;
@@ -29,20 +30,78 @@ use gjoseqlib;
 use File::Path;
 use Data::Dumper;
 
-my ($org_dir, $genbank_file) = @ARGV;
-my ($taxID) = ($org_dir =~ m/(\d+\.\d+)$/o);
+my $orgID;
+my $org_dir;
+my $genbank_file;
+my $extension = 0;
+use Getopt::Long;
+my $rc    = GetOptions("orgID=s"        => \$orgID,
+		       "orgDir=s"       => \$org_dir,
+                       "gbk"            => \$genbank_file,
+		       "extension=i"    => \$extension,
+		       );
+if (! $rc) { print STDERR "$usage\n"; exit }
 
-my $rc;
-($rc = mkpath($org_dir)) || die qq(Could not create OrgDir \'$org_dir\', rc=$rc);
+
+if (!defined($org_dir) && !defined($genbank_file) && (@ARGV == 2)) {
+    ($org_dir, $genbank_file) = @ARGV;
+}
+
+if (!defined($orgID) && ($org_dir =~ m/(\d+\.\d+)$/o)) {
+    $orgID = $1;
+}
+
+
+if (-d $org_dir) {
+    warn "WARNING: orgDir='$org_dir' already exists\n";
+}
+else {
+    ($rc = mkpath($org_dir)) || die qq(Could not create orgDir='$org_dir', rc=$rc);
+}
+
+my $accession = gjogenbank::parse_next_genbank($genbank_file);
+my $db_xref   = $accession->{FEATURES}->{source}->[0]->[1]->{db_xref}->[0];
+if (!defined($orgID)) {
+    if (defined($db_xref)) {
+	if ($db_xref =~ m/^taxon:(\d+)$/) {
+	    $orgID = "$1.$extension";
+	    warn "WARNING: Using orgID='$orgID' based on GenBank db_xref='$db_xref'";
+	}
+	else {
+	    die "ERROR: No orgID and could not parse db_xref='$db_xref' --- aborting";
+	}
+    }
+    else {
+	die "ERROR: No orgID and no db_xref --- aborting";
+    }
+}
+
+if (defined($orgID)) {
+    open(GENOME_ID, q(>), "$org_dir/GENOME_ID")
+	|| die "Could not write-open file '$org_dir/GENOME_ID'";
+    print GENOME_ID ($orgID, "\n");
+    close(GENOME_ID);
+}
+else {
+    die "ERROR: no orgID found on command-line, at end of orgDir path, or within GenBank file --- aborting";
+}
+
+
 my $figV = FIGV->new($org_dir);
 
 my $contigs_file = $org_dir.q(/contigs);
 open(my $contigs_fh, q(>), $contigs_file)
     || die qq(Could not write-open contigs file \'$contigs_file\');
 
-while(defined(my $accession = gjogenbank::parse_next_genbank($genbank_file))) {
+do {
     my $contig_id   = $accession->{ACCESSION}->[0];
     my $contig_dna  = $accession->{SEQUENCE};
+    
+    my $this_xref   = $accession->{FEATURES}->{source}->[0]->[1]->{db_xref}->[0];
+    if (defined($this_xref) && ($this_xref ne $db_xref)) {
+	warn "WARNING: db_xref mismatch for contig='$contig_id': '$this_xref' differs from '$db_xref'\n";
+    }
+    
     $figV->display_id_and_seq( $contig_id, \$contig_dna, $contigs_fh);
     
     foreach my $cds (@ { $accession->{FEATURES}->{CDS} }) {
@@ -68,7 +127,7 @@ while(defined(my $accession = gjogenbank::parse_next_genbank($genbank_file))) {
 	if ($locus) {
 	    my $fid;
 	    if ($translation) {
-		if ($fid = $figV->add_feature(q(Initial Import), $taxID, q(peg), $locus, $aliases, $translation)) {
+		if ($fid = $figV->add_feature(q(Initial Import), $orgID, q(peg), $locus, $aliases, $translation)) {
 		    if ($func) {
 			$figV->assign_function($fid, q(master:Initial Import), $func);
 		    }		    
@@ -76,10 +135,10 @@ while(defined(my $accession = gjogenbank::parse_next_genbank($genbank_file))) {
 	    }
 	    elsif ($pseudo) {
 		my $sequence = gjogenbank::ftr_seq( $cds, $contig_dna);
-		if ($fid = $figV->add_feature(q(Initial Import), $taxID, q(pseudo), $locus, $aliases, $sequence)) {
+		if ($fid = $figV->add_feature(q(Initial Import), $orgID, q(pseudo), $locus, $aliases, $sequence)) {
 		    if ($func) {
 			if ($func !~ m/pseudogene/i) {
-			    $func .= " # pseudogene";
+			    $func .= " \# pseudogene";
 			}
 			
 			$figV->assign_function($fid, q(master:Initial Import), $func);
@@ -91,14 +150,16 @@ while(defined(my $accession = gjogenbank::parse_next_genbank($genbank_file))) {
 	    }
 	}
 	else {
-	    warn (qq(Could not parse CDS feature in accession '$contig_id':\n), Dumper($cds), qq(\n));
+	    warn (qq(Could not parse CDS feature in accession '$contig_id':\n),
+		  Dumper($cds),
+		  qq(\n));
 	}
     }
     
     foreach my $rna (map { $_ ? @$_ : () }
 		     map { my $x = $accession->{FEATURES}->{$_}
-		     } qw( rRNA tRNA misc_RNA ncRNA )
-	) {
+		       } qw( rRNA tRNA misc_RNA ncRNA )
+		     ) {
 #	die Dumper($rna);
 	
 	my $gb_loc      = gjogenbank::location( $rna, $accession );
@@ -118,16 +179,16 @@ while(defined(my $accession = gjogenbank::parse_next_genbank($genbank_file))) {
 	my $aliases     = join(q(,), @aliases);
 	
 	if ($locus && defined($func) && $sequence) {
-	    if (my $fid = $figV->add_feature(q(Initial Import), $taxID, q(rna), $locus, $aliases, $sequence)) {
+	    if (my $fid = $figV->add_feature(q(Initial Import), $orgID, q(rna), $locus, $aliases, $sequence)) {
 		if ($func) {
 		    if ($func =~ m/23S\s+(ribosomal)?\s+RNA/i) { 
-			$func =  q(LSU rRNA ## 23S rRNA, large subunit ribosomal RNA);
+			$func =  "LSU rRNA \#\# 23S rRNA, large subunit ribosomal RNA";
 		    }
 		    elsif ($func =~ m/16S\s+(ribosomal)?\s+RNA/i) { 
-			$func = q(SSU rRNA ## 16S rRNA, small subunit ribosomal RNA);
+			$func = "SSU rRNA \#\# 16S rRNA, small subunit ribosomal RNA";
 		    }
 		    elsif ($func =~ m/5S\s+(ribosomal)?\s+RNA/i) {
-			$func = q(5S rRNA ## 5S ribosomal RNA);
+			$func = "5S rRNA \#\# 5S ribosomal RNA";
 		    }
 		    
 		    $figV->assign_function($fid, q(master:Initial Import), $func);
@@ -138,8 +199,10 @@ while(defined(my $accession = gjogenbank::parse_next_genbank($genbank_file))) {
 	    }
 	}
 	else {
-	    warn (qq(Could not parse RNA feature in accession '$contig_id': locus='$locus', func='$func', sequence='$sequence'\n), Dumper($rna), qq(\n));
+	    warn (qq(Could not parse RNA feature in accession '$contig_id': locus='$locus', func='$func', sequence='$sequence'\n),
+		  Dumper($rna),
+		  qq(\n));
 	}
     }
-}
+} until (not defined($accession = gjogenbank::parse_next_genbank($genbank_file)));
 exit(0);
