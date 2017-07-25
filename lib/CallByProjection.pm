@@ -8,8 +8,6 @@ use Data::Dumper;
 use Carp;
 use SAPserver;
 use ANNOserver;
-use Bio::KBase::CDMI::CDMIClient;
-use Bio::KBase::Utilities::ScriptThing;
 
 sub fill_in_by_walking {
     my ($close_genomes,$contigs,$coding_regions,$calls,$parms) = @_;

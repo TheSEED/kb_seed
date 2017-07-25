@@ -481,6 +481,48 @@ sub Matches {
     return $retVal;
 }
 
+=head3 Distance
+
+    my $dist = $loc->Distance($loc2);
+
+Compute the distance between two locations.
+
+=over 4
+
+=item loc2
+
+Other location to compare to this one.
+
+=item RETURN
+
+Returns the number of base pairs between the locations, or C<undef> if the locations are on different contigs.
+
+=back
+
+=cut
+
+sub Distance {
+    my ($self, $loc2) = @_;
+    # This will be the return value.
+    my $retVal;
+    # Insure the contigs are the same.
+    if ($self->Contig eq $loc2->Contig) {
+        # Figure out which one is leftmost.
+        if ($self->Right < $loc2->Left) {
+            # We are leftmost, so our right precedes his left.
+            $retVal = $loc2->Left - $self->Right;
+        } elsif ($self->Left > $loc2->Right) {
+            # He is leftmost, so his right precedes our left.
+            $retVal = $self->Left - $loc2->Right;
+        } else {
+            # We overlap.
+            $retVal = 0;
+        }
+    }
+    # Return the result.
+    return $retVal;
+}
+
 =head3 FixContig
 
     $loc->FixContig($genomeID);

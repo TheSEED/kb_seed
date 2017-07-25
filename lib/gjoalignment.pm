@@ -1,6 +1,6 @@
 # This is a SAS component
 #
-# Copyright (c) 2003-2015 University of Chicago and Fellowship
+# Copyright (c) 2003-2016 University of Chicago and Fellowship
 # for Interpretations of Genomes. All Rights Reserved.
 #
 # This file is part of the SEED Toolkit.
@@ -53,14 +53,23 @@ package gjoalignment;
 #    @alignment = add_to_alignment_v2(  $seqentry, \@alignment, \%options );
 #    @alignment = add_to_alignment_v2a( $seqentry, \@alignment, \%options );
 #
+#-------------------------------------------------------------------------------
 #  Compare two sequences for fraction identity.
+#
+#  The first form of the functions count the total number of positions.
+#  The second form excludes terminal alignment gaps from the count of positons.
 #
 #     $fract_id = fraction_identity( $seq1, $seq2, $type );
 #     $fract_id = fraction_aa_identity( $seq1, $seq2 );
 #     $fract_id = fraction_nt_identity( $seq1, $seq2 );
 #
+#     $fract_id = fraction_identity_2( $seq1, $seq2, $type );
+#     $fract_id = fraction_aa_identity_2( $seq1, $seq2 );
+#     $fract_id = fraction_nt_identity_2( $seq1, $seq2 );
+#
 #     $type is 'p' or 'n' (D = p)
 #
+#-------------------------------------------------------------------------------
 #  Find the consensus amino acid (or nucleotide) at specified alignment column.
 #
 #       $residue              = consensus_aa_in_column( \@align, $column )
@@ -79,6 +88,57 @@ package gjoalignment;
 #  while the second form takes a reference to an array of references to
 #  sequences. Column numbers are 1-based.
 #
+#-------------------------------------------------------------------------------
+#  Remove prefix and/or suffix regions that are present in <= 25% (or other
+#  fraction) of the sequences in an alignment.  The function does not alter
+#  the input array or its elements.
+#
+#     @align = simple_trim( \@align, $fraction_of_seqs )
+#    \@align = simple_trim( \@align, $fraction_of_seqs )
+#
+#     @align = simple_trim_start( \@align, $fraction_of_seqs )
+#    \@align = simple_trim_start( \@align, $fraction_of_seqs )
+#
+#     @align = simple_trim_end( \@align, $fraction_of_seqs )
+#    \@align = simple_trim_end( \@align, $fraction_of_seqs )
+#
+#  This is not meant to be a general purpose alignment trimming tool, but
+#  rather it is a simple way to remove the extra sequence in a few outliers.
+#
+#-------------------------------------------------------------------------------
+#  Remove highly similar sequences from an alignment.
+#
+#     @align = dereplicate_aa_align( \@align, $similarity, $measure )
+#    \@align = dereplicate_aa_align( \@align, $similarity, $measure )
+#
+#  By default, the similarity measure is fraction identity, and the sequences
+#  of greater than 80% identity are removed.
+#
+#  Remove similar sequences from an alignment with a target of an alignment
+#  with exactly n sequences, with a maximal coverage of sequence diversity.
+#
+#     @align = dereplicate_aa_align_n( \@align, $n, $measure );
+#    \@align = dereplicate_aa_align_n( \@align, $n, $measure );
+#
+#  By default, the similarity measure is fraction identity.
+#
+#  Measures of similarity (keyword matching is relatively flexible)
+#
+#      identity                # fraction identity
+#      identity_2              # fraction identity (trim terminal gaps)
+#      positives               # fraction positive scoring matches with BLOSUM62 matrix
+#      positives_2             # fraction positive scoring matches with BLOSUM62 matrix (trim terminal gaps)
+#      nbs                     # normalized bit score with BLOSUM62 matrix
+#      nbs_2                   # normalized bit score with BLOSUM62 matrix (trim terminal gaps)
+#      normalized_bit_score    # normalized bit score with BLOSUM62 matrix
+#      normalized_bit_score_2  # normalized bit score with BLOSUM62 matrix (trim terminal gaps)
+#
+#  The forms that end with 2 trim terminal gap regions before scoring.
+#  Beware that normalized bit scores run from 0 up to about 2.4 (not 1)
+#
+#  The resulting alignment will be packed (columns of all gaps removed).
+#
+#-------------------------------------------------------------------------------
 #  Extract a representative set from an alignment
 #
 #     @alignment = representative_alignment( \@alignment, \%options );
@@ -101,7 +161,10 @@ package gjoalignment;
 use strict;
 use gjoseqlib;
 use SeedAware;
+use File::Temp;
+use Data::Dumper;
 use Carp;                       # Used for diagnostics
+
 eval { require Data::Dumper };  # Not present on all systems
 
 require Exporter;
@@ -116,6 +179,12 @@ our @EXPORT = qw(
         add_to_alignment_v2
         add_to_alignment_v2a
         bootstrap_sample
+        dereplicate_aa_align
+        dereplicate_aa_align_n
+        representative_alignment
+        simple_trim
+        simple_trim_start
+        simple_trim_end
         );
 
 
@@ -142,6 +211,7 @@ our @EXPORT = qw(
 #     in2       => \@ali2     #  Align \@seqs with \@ali2; same as profile, or seed
 #     profile   => \@ali2     #  Align \@seqs with \@ali2; same as in2, or seed
 #     seed      => \@ali2     #  Align \@seqs with \@ali2; same as in2, or profile
+#     treeout   =>  $file     #  Copy the output tree into this file
 #     version   =>  $bool     #  Return the program version number, or undef
 #
 #  Many of the program flags can be used as keys (without the leading --).
@@ -166,15 +236,14 @@ sub align_with_mafft
     if ( $version )
     {
         my $tmpdir = SeedAware::location_of_tmp( $opts );
-        my $tmpF   = SeedAware::tmp_file_name( "version", '', $tmpdir );
+        my ( $tmpFH, $tmpF ) = File::Temp::tempfile( "version_XXXXXX", DIR => $tmpdir, UNLINK => 1 );
+        close( $tmpFH );
 
         SeedAware::system_with_redirect( $mafft, "--help", { stderr => $tmpF } );
         open( MAFFT, $tmpF ) or die "Could not open $tmpF";
-        my @info = <MAFFT>;
+        ( $version ) = grep { /MAFFT/ } <MAFFT>;
         close( MAFFT );
-        unlink( $tmpF );
 
-        $version = $info[2]; # second line of MAFFT usage info
         chomp( $version );
         return $version;
     }
@@ -227,25 +296,27 @@ sub align_with_mafft
     my $degap = ! ( $add || $profile );
     my $tree  = ! ( $add || $profile );
 
-    my $tmpdir = SeedAware::location_of_tmp( $opts );
-    my $tmpin  = SeedAware::tmp_file_name( "seqs",  'fasta', $tmpdir );
-    my $tmpin2 = SeedAware::tmp_file_name( "seqs2", 'fasta', $tmpdir );
-    my $tmpout = SeedAware::tmp_file_name( "ali",   'fasta', $tmpdir );
-
     if ( ! ( $seqs && ref($seqs) eq 'ARRAY' && @$seqs && ref($seqs->[0]) eq 'ARRAY' ) )
     {
         print STDERR "gjoalignment::align_with_mafft() called without sequences\n";
         return undef;
     }
 
+    my   $tmpdir              = SeedAware::location_of_tmp( $opts );
+    my ( $tmpinFH,  $tmpin  ) = File::Temp::tempfile( "seqs_XXXXXX",  SUFFIX => 'fasta', DIR => $tmpdir, UNLINK => 1 );
+    my ( $tmpin2FH, $tmpin2 ) = File::Temp::tempfile( "seqs2_XXXXXX", SUFFIX => 'fasta', DIR => $tmpdir, UNLINK => 1 );
+    my ( $tmpoutFH, $tmpout ) = File::Temp::tempfile( "ali_XXXXXX",   SUFFIX => 'fasta', DIR => $tmpdir, UNLINK => 1 );
+
     my ( $id, $seq, %comment );
+    my $id2 = "seq000000";
     my @clnseq = map { ( $id, $seq ) = @$_[0,2];
-                       $comment{ $id } = $_->[1] || '';
+                       $id2++;
+                       $comment{ $id2 } = [ $_->[0], $_->[1] || '' ];
                        $seq =~ tr/A-Za-z//cd if $degap;  # degap
-                       [ $id, '', $seq ]
+                       [ $id2, '', $seq ]
                      }
                  @$seqs;
-    gjoseqlib::write_fasta( $tmpin, \@clnseq );
+    gjoseqlib::write_fasta( $tmpinFH, \@clnseq );
 
     #  Adding one sequence is a special case of profile alignment
 
@@ -259,20 +330,26 @@ sub align_with_mafft
             return undef;
         }
 
+        my $id2 = "prof000000";
         my @clnseq2 = map { ( $id, $seq ) = @$_[0,2];
-                            $comment{ $id } = $_->[1] || '';
+                            $id2++;
+                            $comment{ $id2 } = [ $_->[0], $_->[1] || '' ];
                             $seq =~ tr/A-Za-z//cd if $degap;  # degap
-                            [ $id, '', $seq ]
+                            [ $id2, '', $seq ]
                           }
                       @$profile;
 
-        gjoseqlib::write_fasta( $tmpin2, \@clnseq );
+        gjoseqlib::write_fasta( $tmpin2FH, \@clnseq );
     }
 
-    my @params = $profile ? ( '--seed', $tmpin, '--seed', $tmpin2, '/dev/null')
-               :            ( '--treeout',                         $tmpin,    );
+    close( $tmpinFH );
+    close( $tmpin2FH );
+    close( $tmpoutFH );
 
-    my $algorithm = lc( $opts->{ algorithm } || $opts->{ alg } );
+    my @params = $profile ? ( '--seed',    $tmpin, '--seed', $tmpin2, '/dev/null' )
+                          : ( '--treeout', $tmpin );
+
+    my $algorithm = lc( $opts->{ algorithm } || $opts->{ alg } || '' );
     if ( $algorithm )
     {
         delete $opts->{ $_ } for qw( localpair genafpair globalpair nofft fft retree maxiterate );
@@ -288,28 +365,38 @@ sub align_with_mafft
 
     foreach ( keys %$opts )
     {
-        @params = ("--$_", @params)               if $prog_flag{ $_ };
-        @params = ("--$_", $opts->{$_}, @params)  if $prog_val{ $_ };
+        unshift @params, "--$_"               if $prog_flag{ $_ };
+        unshift @params, "--$_", $opts->{$_}  if $prog_val{ $_ };
     }
 
+    #  Handle U for selenocysteine; ideally one would convert it to C, align,
+    #  and then convert if back.  But, for now ...
+    unshift @params, '--anysymbol';
+
     my $redirects = { stdout => $tmpout, stderr => '/dev/null' };
+    # my $redirects = { stdout => $tmpout };
     SeedAware::system_with_redirect( $mafft, @params, $redirects );
     
     my @ali = &gjoseqlib::read_fasta( $tmpout );
-    foreach $_ ( @ali ) { $_->[1] = $comment{$_->[0]} }
+    foreach $_ ( @ali )
+    {
+        my $ori_name = $comment{ $_->[0] } || [ $_->[0], '' ];
+        @$_[0,1] = @$ori_name;
+    }
 
     my $treestr;
-    my $treeF  = "$tmpin.tree";
-    if ( $tree && open( TREE, "<$treeF" ) ) { $treestr = join( "", <TREE> ); close( TREE ) }
-    if ( $opts->{ treeout } ) { SeedAware::system_with_redirect( "cp", $treeF, $opts->{ treeout } ) }
+    if ( $tree )
+    {
+        my $treeF = "$tmpin.tree";
+        if ( open( TREE, "<", $treeF ) ) { $treestr = join( "", <TREE> ); close( TREE ) }
+        if ( $opts->{ treeout } ) { system( "cp", $treeF, $opts->{ treeout } ) }
 
-    unlink( $tmpin, $tmpout,
-            ( $profile ? $tmpin2 : () ),
-            ( $tree    ? $treeF  : () )
-          );
+        unlink( $treeF );    #  The others do away on their own
+    }
 
     return wantarray ? ( \@ali, $treestr ) : \@ali;
 }
+
 
 #===============================================================================
 #  Align sequences with muscle and return the alignment, or alignment and tree.
@@ -332,6 +419,7 @@ sub align_with_mafft
 #     in2      => \@ali2     #  Align \@seqs with \@ali2; same as profile
 #     profile  => \@ali2     #  Align \@seqs with \@ali2; same as in2
 #     refine   =>  $bool     #  Do not start from scratch
+#     treeout  =>  $file     #  Copy the output tree into this file
 #     version  =>  $bool     #  Return the program version number, or undef
 #
 #  Many of the program flags can be used as keys (without the leading -).
@@ -356,7 +444,7 @@ sub align_with_muscle
 
     if ( $version )
     {
-        $version = SeedAware::run_gathering_output($muscle, "-version");
+        $version = SeedAware::run_gathering_output( $muscle, "-version" );
         chomp $version;
         return $version;
     }
@@ -417,17 +505,17 @@ sub align_with_muscle
     my $degap = ! ( $add || $profile || $refine );
     my $tree  = ! ( $add || $profile || $refine );
 
-    my $tmpdir = SeedAware::location_of_tmp( $opts );
-    my $tmpin  = SeedAware::tmp_file_name( "seqs",  'fasta',  $tmpdir );
-    my $tmpin2 = SeedAware::tmp_file_name( "seqs2", 'fasta',  $tmpdir );
-    my $tmpout = SeedAware::tmp_file_name( "ali",   'fasta',  $tmpdir );
-    my $treeF  = SeedAware::tmp_file_name( "ali",   'newick', $tmpdir );
-
     if ( ! ( $seqs && ref($seqs) eq 'ARRAY' && @$seqs && ref($seqs->[0]) eq 'ARRAY' ) )
     {
         print STDERR "gjoalignment::align_with_muscle() called without sequences\n";
         return undef;
     }
+
+    my $tmpdir = SeedAware::location_of_tmp( $opts );
+    my ( $tmpinFH,  $tmpin  ) = File::Temp::tempfile( "seqs_XXXXXX",  SUFFIX => 'fasta',  DIR => $tmpdir, UNLINK => 1 );
+    my ( $tmpin2FH, $tmpin2 ) = File::Temp::tempfile( "seqs2_XXXXXX", SUFFIX => 'fasta',  DIR => $tmpdir, UNLINK => 1 );
+    my ( $tmpoutFH, $tmpout ) = File::Temp::tempfile( "ali_XXXXXX",   SUFFIX => 'fasta',  DIR => $tmpdir, UNLINK => 1 );
+    my ( $treeFH,   $treeF )  = File::Temp::tempfile( "tree_XXXXXX",  SUFFIX => 'newick', DIR => $tmpdir, UNLINK => 1 );
 
     my ( $id, $seq, %comment );
     my @clnseq = map { ( $id, $seq ) = @$_[0,2];
@@ -436,7 +524,7 @@ sub align_with_muscle
                        [ $id, '', $seq ]
                      }
                  @$seqs;
-    gjoseqlib::write_fasta( $tmpin, \@clnseq );
+    gjoseqlib::write_fasta( $tmpinFH, \@clnseq );
 
     #  Adding one sequence is a special case of profile alignment
 
@@ -457,12 +545,17 @@ sub align_with_muscle
                           }
                       @$profile;
 
-        gjoseqlib::write_fasta( $tmpin2, \@clnseq );  # The zero is "do not compress"
+        gjoseqlib::write_fasta( $tmpin2FH, \@clnseq );
     }
 
-    my @params = $profile ? ( '-in1', $tmpin, '-in2', $tmpin2, '-out', $tmpout, '-profile' )
-               : $refine  ? ( '-in1', $tmpin,                  '-out', $tmpout, '-refine' )
-               :            ( '-in',  $tmpin,                  '-out', $tmpout, '-tree2', $treeF );
+    close( $tmpinFH );
+    close( $tmpin2FH );
+    close( $tmpoutFH );
+    close( $treeFH );
+
+    my @params = $profile ? ( -in1 => $tmpin, -in2 => $tmpin2, -out => $tmpout, '-profile' )
+               : $refine  ? ( -in1 => $tmpin,                  -out => $tmpout, '-refine' )
+               :            ( -in  => $tmpin,                  -out => $tmpout,  -tree2 => $treeF );
 
     foreach ( keys %$opts )
     {
@@ -477,12 +570,11 @@ sub align_with_muscle
     foreach $_ ( @ali ) { $_->[1] = $comment{$_->[0]} }
 
     my $treestr;
-    if ( $tree && open( TREE, "<$treeF" ) ) { $treestr = join( "", <TREE> ); close( TREE ) }
-
-    unlink( $tmpin, $tmpout,
-            ( $profile ? $tmpin2 : () ),
-            ( $tree    ? $treeF  : () )
-          );
+    if ( $tree )
+    {
+        if ( open( TREE, "<", $treeF ) ) { $treestr = join( "", <TREE> ); close( TREE ) }
+        if ( $opts->{ treeout } ) { system( "cp", $treeF, $opts->{ treeout } ) }
+    }
 
     return wantarray ? ( \@ali, $treestr ) : \@ali;
 }
@@ -529,12 +621,16 @@ sub align_with_clustal
 
     #  Do the alignment:
 
-    my $tmpdir  = SeedAware::location_of_tmp( $opts );
-    my $seqfile = SeedAware::tmp_file_name( "align_fasta",  'fasta', $tmpdir );
-    my $outfile = SeedAware::tmp_file_name( "align_fasta",  'aln',   $tmpdir );
-    my $dndfile = SeedAware::tmp_file_name( "align_fasta",  'dnd',   $tmpdir );
+    my $tmpdir = SeedAware::location_of_tmp( $opts );
+    my ( $seqFH, $seqfile ) = File::Temp::tempfile( "align_fasta_XXXXXX", SUFFIX => 'fasta', DIR => $tmpdir, UNLINK => 1 );
+    my ( $outFH, $outfile ) = File::Temp::tempfile( "align_fasta_XXXXXX", SUFFIX => 'aln',   DIR => $tmpdir, UNLINK => 1 );
+    my ( $dndFH, $dndfile ) = File::Temp::tempfile( "align_fasta_XXXXXX", SUFFIX => 'dnd',   DIR => $tmpdir, UNLINK => 1 );
 
-    gjoseqlib::write_fasta( $seqfile, \@seqs2 );
+    gjoseqlib::write_fasta( $seqFH, \@seqs2 );
+
+    close( $seqFH );
+    close( $outFH );
+    close( $dndFH );
 
     my $clustalw = SeedAware::executable_for( $opts->{ clustalw } || $opts->{ program } || 'clustalw' )
         or print STDERR "Could not locate executable file for 'clustalw'.\n"
@@ -551,7 +647,8 @@ sub align_with_clustal
     SeedAware::system_with_redirect( $clustalw, @params, $redirects );
 
     my @aligned = gjoseqlib::read_clustal_file( $outfile );
-    unlink( $seqfile, $outfile, $dndfile );
+
+    unlink( $dndfile );  #  The others do away on their own
 
     #  Restore the id and definition, and restore original characters to sequence:
 
@@ -580,6 +677,7 @@ sub fix_sequence
     $seq1 =~ s/-+//g;   # The following requires $seq1 to be gapfree
     join '', map { $_ eq '-' ? '-' : substr( $seq1, $i++, 1 ) } split //, $seq2;
 }
+
 
 #===============================================================================
 #  Insert a new sequence into an alignment without altering the relative
@@ -651,13 +749,18 @@ sub add_to_alignment
     #  Do the profile alignment:
 
     my $tmpdir  = SeedAware::location_of_tmp( );
-    my $profile = SeedAware::tmp_file_name( "add_to_align_1", 'fasta', $tmpdir );
-    my $seqfile = SeedAware::tmp_file_name( "add_to_align_2", 'fasta', $tmpdir );
-    my $outfile = SeedAware::tmp_file_name( "add_to_align",   'aln',   $tmpdir );
+    my ( $proFH, $profile ) = File::Temp::tempfile( "add_to_align_1_XXXXXX", SUFFIX => 'fasta', DIR => $tmpdir, UNLINK => 1 );
+    my ( $seqFH, $seqfile ) = File::Temp::tempfile( "add_to_align_2_XXXXXX", SUFFIX => 'fasta', DIR => $tmpdir, UNLINK => 1 );
+    my ( $outFH, $outfile ) = File::Temp::tempfile( "add_to_align_XXXXXX",   SUFFIX => 'aln',   DIR => $tmpdir, UNLINK => 1 );
     ( my $dndfile = $profile ) =~ s/fasta$/dnd/;  # The program ignores our name
 
-    gjoseqlib::write_fasta( $profile, \@relevant );
-    gjoseqlib::write_fasta( $seqfile, [ $clnseq ] );
+    gjoseqlib::write_fasta( $proFH, \@relevant );
+    gjoseqlib::write_fasta( $seqFH, [ $clnseq ] );
+
+    close( $proFH );
+    close( $seqFH );
+    close( $outFH );
+
     #
     #  I would have thought that the profile tree file should be -newtree1, but
     #  that fails.  -newtree works fine at putting the file where we want it.
@@ -681,7 +784,7 @@ sub add_to_alignment
 
     my @relevant_aligned = map { $_->[2] } gjoseqlib::read_clustal_file( $outfile );
 
-    unlink( $profile, $seqfile, $outfile, $dndfile );
+    unlink( $dndfile );  #  The others do away on their own
 
     my $ali_seq = pop @relevant_aligned;
 
@@ -1217,14 +1320,18 @@ sub clustal_profile_alignment_0
     my ( $seqs1, $seqs2 ) = @_;
 
     my $tmpdir  = SeedAware::location_of_tmp( );
-    my $profile = SeedAware::tmp_file_name( "add_to_align_1", 'fasta', $tmpdir );
-    my $seqfile = SeedAware::tmp_file_name( "add_to_align_2", 'fasta', $tmpdir );
-    my $outfile = SeedAware::tmp_file_name( "add_to_align",   'aln',   $tmpdir );
+    my ( $proFH, $profile ) = File::Temp::tempfile( "add_to_align_1_XXXXXX", SUFFIX => 'fasta', DIR => $tmpdir, UNLINK => 1 );
+    my ( $seqFH, $seqfile ) = File::Temp::tempfile( "add_to_align_2_XXXXXX", SUFFIX => 'fasta', DIR => $tmpdir, UNLINK => 1 );
+    my ( $outFH, $outfile ) = File::Temp::tempfile( "add_to_align_XXXXXX",   SUFFIX => 'aln',   DIR => $tmpdir, UNLINK => 1 );
     ( my $dndfile = $profile ) =~ s/fasta$/dnd/;  # The program ignores our name
 
     $seqs2 = [ $seqs2 ] if ! ( ref $seqs2->[0] );
-    gjoseqlib::write_fasta( $profile, $seqs1 );
-    gjoseqlib::write_fasta( $seqfile, $seqs2 );
+    gjoseqlib::write_fasta( $proFH, $seqs1 );
+    gjoseqlib::write_fasta( $seqFH, $seqs2 );
+
+    close( $proFH );
+    close( $seqFH );
+    close( $outFH );
 
     my $clustalw = SeedAware::executable_for( 'clustalw' )
         or print STDERR "Could not locate executable file for 'clustalw'.\n"
@@ -1241,11 +1348,11 @@ sub clustal_profile_alignment_0
     my $redirects = { stdout => '/dev/null' };
     SeedAware::system_with_redirect( $clustalw, @params, $redirects );
 
-    #  2010-09-08: clustalw profile align can columns of all gaps; so pack it
+    #  2010-09-08: clustalw profile align can have columns of all gaps; so pack it
 
     my @aligned = gjoseqlib::pack_alignment( gjoseqlib::read_clustal_file( $outfile ) );
 
-    unlink( $profile, $seqfile, $outfile, $dndfile );
+    unlink( $dndfile );   #  The others go away on their own
 
     wantarray ? @aligned : \@aligned;
 }
@@ -1299,15 +1406,19 @@ sub fract_identity
     my ( $s1, $s2, $i, $same );
 
     my $tmpdir  = SeedAware::location_of_tmp( );
-    my $infile  = SeedAware::tmp_file_name( "fract_identity", 'fasta', $tmpdir );
-    my $outfile = SeedAware::tmp_file_name( "fract_identity", 'aln',   $tmpdir );
-    my $dndfile = SeedAware::tmp_file_name( "fract_identity", 'dnd',   $tmpdir );
+    my ( $inFH,  $infile )  = File::Temp::tempfile( "fract_identity_XXXXXX", SUFFIX => 'fasta', DIR => $tmpdir, UNLINK => 1 );
+    my ( $outFH, $outfile ) = File::Temp::tempfile( "fract_identity_XXXXXX", SUFFIX => 'aln',   DIR => $tmpdir, UNLINK => 1 );
+    my ( $dndFH, $dndfile ) = File::Temp::tempfile( "fract_identity_XXXXXX", SUFFIX => 'dnd',   DIR => $tmpdir, UNLINK => 1 );
 
     $s1 = $seq1->[2];
     $s1 =~ s/[^A-Za-z]+//g;
     $s2 = $seq2->[2];
     $s2 =~ s/[^A-Za-z]+//g;
-    gjoseqlib::write_fasta( $infile, [ [ "s1", "", $s1 ], [ "s2", "", $s2 ] ] );
+    gjoseqlib::write_fasta( $inFH, [ [ "s1", "", $s1 ], [ "s2", "", $s2 ] ] );
+
+    close( $inFH );
+    close( $outFH );
+    close( $dndFH );
 
     my $clustalw = SeedAware::executable_for( 'clustalw' )
         or print STDERR "Could not locate executable file for 'clustalw'.\n"
@@ -1323,8 +1434,6 @@ sub fract_identity
     SeedAware::system_with_redirect( $clustalw, @params, $redirects );
 
     ( $s1, $s2 ) = map { $_->[2] } gjoseqlib::read_clustal_file( $outfile );  # just seqs
-
-    unlink( $infile, $outfile, $dndfile );
 
     fraction_aa_identity( $s1, $s2 );
 }
@@ -1361,12 +1470,21 @@ sub guess_seq_type
 #===============================================================================
 #  Compare two sequences for fraction identity.
 #
+#  The first form of the functions count the total number of positions.
+#  The second form excludes terminal alignment gaps from the count of positons.
+#
 #     $fract_id = fraction_identity( $seq1, $seq2, $type );
 #     $fract_id = fraction_aa_identity( $seq1, $seq2 );
 #     $fract_id = fraction_nt_identity( $seq1, $seq2 );
 #
+#     $fract_id = fraction_identity_2( $seq1, $seq2, $type );
+#     $fract_id = fraction_aa_identity_2( $seq1, $seq2 );
+#     $fract_id = fraction_nt_identity_2( $seq1, $seq2 );
+#
 #  $type is 'p' or 'n' (D = p)
 #===============================================================================
+#  Including terminal gaps as differences:
+
 sub fraction_identity
 {
     my $prot = ( $_[2] && ( $_[2] =~ m/^n/i ) ) ? 0 : 1;
@@ -1385,6 +1503,28 @@ sub fraction_nt_identity
 {
     my ( $npos, $nid ) = gjoseqlib::interpret_nt_align( @_[0,1] );
     ( $npos > 0 ) ? $nid / $npos : undef
+}
+
+#  Excluding terminal gaps:
+
+sub fraction_identity_2
+{
+    my $prot = ( $_[2] && ( $_[2] =~ m/^n/i ) ) ? 0 : 1;
+    my ( $npos, $nid ) = $prot ? gjoseqlib::interpret_aa_align_2( @_[0,1] )
+                               : gjoseqlib::interpret_nt_align_2( @_[0,1] );
+    ( $npos > 0 ) ? $nid / $npos : undef
+}
+
+sub fraction_aa_identity_2
+{
+    my ( $npos, $nid, $tgap ) = ( gjoseqlib::interpret_aa_align( @_[0,1] ) )[0,1,5];
+    ( $npos - $tgap > 0 ) ? $nid / ( $npos - $tgap ): undef
+}
+
+sub fraction_nt_identity_2
+{
+    my ( $npos, $nid, $tgap ) = ( gjoseqlib::interpret_nt_align( @_[0,1] ) )[0,1,5];
+    ( $npos - $tgap > 0 ) ? $nid / ( $npos - $tgap ): undef
 }
 
 
@@ -1412,7 +1552,8 @@ sub same_col
 
 
 #===============================================================================
-#  Trim sequences (needs to get updated to new tools and psiblast)
+#  Trim sequences
+#  Needs to get updated to new tools and psiblast
 #===============================================================================
 sub trim_with_blastall
 {
@@ -1451,10 +1592,10 @@ sub trim_with_blastall
                    @opt
                  );
     my $redirects = { stderr => '/dev/null' };
-    my $BLASTOUT = SeedAware::read_from_pipe_with_redirect( $blastall, @params, $redirects )
+    my $blastoutFH = SeedAware::read_from_pipe_with_redirect( $blastall, @params, $redirects )
         or die "could not handle the blast";
-    my @out = map { chomp; [ ( split )[ 1, 6, 7, 8, 9 ] ] } <$BLASTOUT>;
-    close( $BLASTOUT );
+    my @out = map { chomp; [ ( split )[ 1, 6, 7, 8, 9 ] ] } <$blastoutFH>;
+    close( $blastoutFH );
 
     my @dbfile = map { "$blastfile.$_" } $type =~ m/^n/i ? qw( nin nhr nsq ) : qw( pin phr psq );
     unlink( $seqfile, $blastfile, @dbfile );
@@ -1489,20 +1630,457 @@ sub remove
 
 
 #===============================================================================
+#  Remove prefix and/or suffix regions that are present in <= 25% (or other
+#  fraction) of the sequences in an alignment.  The function does not alter
+#  the input array or its elements.
+#
+#     @align = simple_trim( \@align, $fraction_of_seqs )
+#    \@align = simple_trim( \@align, $fraction_of_seqs )
+#
+#     @align = simple_trim_start( \@align, $fraction_of_seqs )
+#    \@align = simple_trim_start( \@align, $fraction_of_seqs )
+#
+#     @align = simple_trim_end( \@align, $fraction_of_seqs )
+#    \@align = simple_trim_end( \@align, $fraction_of_seqs )
+#
+#  This is not meant to be a general purpose alignment trimming tool, but
+#  rather it is a simple way to remove the extra sequence in a few outliers.
+#===============================================================================
+sub simple_trim
+{
+    my ( $align, $fract ) = @_;
+    ref( $align ) eq 'ARRAY' && @$align
+        or return wantarray ? () : [];
+    $fract ||= 0.25;
+
+    my @prefix_len = sort { $a <=> $b }
+                     map  { $_->[2] =~ /^(-*)/; length( $1 ) }
+                     @$align;
+    my $trim_beg = $prefix_len[ int( $fract * @$align ) ];
+
+    my @suffix_len = sort { $a <=> $b }
+                     map  { $_->[2] =~ /(-*)$/; length( $1 ) }
+                     @$align;
+    my $trim_end = $suffix_len[ int( $fract * @$align ) ];
+
+    if ( $trim_beg || $trim_end )
+    {
+        my $len = length( $align->[0]->[2] ) - ( $trim_beg + $trim_end );
+        my @align = map { [ @$_[0,1], substr( $_->[2], $trim_beg, $len ) ] } @$align;
+        $align = \@align;
+    }
+
+    wantarray ? @$align : $align;
+}
+
+
+sub simple_trim_start
+{
+    my ( $align, $fract ) = @_;
+    ref( $align ) eq 'ARRAY' && @$align
+        or return wantarray ? () : [];
+    $fract ||= 0.25;
+
+    my @prefix_len = sort { $a <=> $b }
+                     map  { $_->[2] =~ /^(-*)/; length( $1 ) }
+                     @$align;
+    my $trim_beg = $prefix_len[ int( $fract * @$align ) ];
+    if ( $trim_beg )
+    {
+        #  Do we add the trim data to the descriptions?
+        my @align = map { [ @$_[0,1], substr( $_->[2], $trim_beg ) ] } @$align;
+        $align = \@align;
+    }
+
+    wantarray ? @$align : $align;
+}
+
+
+sub simple_trim_end
+{
+    my ( $align, $fract ) = @_;
+    ref( $align ) eq 'ARRAY' && @$align
+        or return wantarray ? () : [];
+    $fract ||= 0.25;
+
+    my @suffix_len = sort { $a <=> $b }
+                     map  { $_->[2] =~ /(-*)$/; length( $1 ) }
+                     @$align;
+    my $trim_end = $suffix_len[ int( $fract * @$align ) ];
+    if ( $trim_end )
+    {
+        my $len = length( $align->[0]->[2] ) - $trim_end;
+        #  Do we add the trim data to the descriptions?
+        my @align = map { [ @$_[0,1], substr( $_->[2], 0, $len ) ] } @$align;
+        $align = \@align;
+    }
+
+    wantarray ? @$align : $align;
+}
+
+
+#===============================================================================
+#  Remove highly similar sequences from an alignment.
+#
+#     @align = dereplicate_aa_align( \@align, $similarity, $measure, \%opts )
+#    \@align = dereplicate_aa_align( \@align, $similarity, $measure, \%opts )
+#     @align = dereplicate_aa_align( \@align, $similarity,           \%opts )
+#    \@align = dereplicate_aa_align( \@align, $similarity,           \%opts )
+#
+#  By default, the similarity measure is fraction identity, and sequences of
+#  greater than 80% identity are removed.
+#
+#  Remove similar sequences from an alignment with a target of an alignment
+#  with exactly n sequences, with a maximal coverage of sequence diversity.
+#
+#     @align = dereplicate_aa_align_n( \@align, $n, $measure, \%opts );
+#    \@align = dereplicate_aa_align_n( \@align, $n, $measure, \%opts );
+#     @align = dereplicate_aa_align_n( \@align, $n,           \%opts );
+#    \@align = dereplicate_aa_align_n( \@align, $n,           \%opts );
+#
+#  By default, the similarity measure is fraction identity.
+#
+#  The resulting alignments will be packed (columns of all gaps removed), unless
+#  the no_pack option is true.
+#
+#  Measures of similarity (keyword matching is relatively flexible)
+#
+#      identity                # fraction identity
+#      identity_2              # fraction identity (ignoring terminal gaps)
+#      positives               # fraction positive scores with BLOSUM62 matrix
+#      positives_2             # fraction positive scores with BLOSUM62 matrix (ignoring terminal gaps)
+#      nbs                     # normalized bit score with BLOSUM62 matrix
+#      nbs_2                   # normalized bit score with BLOSUM62 matrix (ignoring terminal gaps)
+#      normalized_bit_score    # normalized bit score with BLOSUM62 matrix
+#      normalized_bit_score_2  # normalized bit score with BLOSUM62 matrix (ignoring terminal gaps)
+#
+#  The forms that end with 2 ignore terminal gap regions in the scoring, so a
+#  sequence that is wholly included in another is considered identical.  When
+#  sequences are sorted from longest to shortest, this provides a reasonable
+#  behavior.
+#
+#  Beware that normalized bit scores run from 0 up to about 2.4 (not 1).
+#
+#  Options:
+#
+#     keep_first => bool       # keep the first sequence as supplied
+#     measure    => keyword    # an alternative to the similarity measure positional parameter
+#     no_pack    => bool       # do not pack the resulting alignment
+#     no_reorder => bool       # do not reorder sequences before dereplication
+#
+#  Sequences are prioritized for keeping by their number of non-gap characters.
+#  So, for the most part, it is the longer version that will be kept.  The
+#  keep_first and no_reorder options provide control of the behavior.  The
+#  keep_first option will keep the first sequence first (so it will always be
+#  retained), and will reorder the rest by number of residues.  This is a
+#  good compromise if there is one sequence is to be used as a reference for
+#  other operations.  The no_reorder option allows the user to provide an input
+#  order that reflects the desired prioritizes all sequences.
+#-------------------------------------------------------------------------------
+if ( 0 )
+{
+    my $junk = <<'End_of_dereplicate_aa_align_test_code';
+
+cd /Users/gary/Desktop/FIG/trees/nr_by_size_3
+set in=core_seed_nr_0079/clust_00001.align.fasta
+
+perl < $in -e 'use gjoalignment; use Data::Dumper; use gjoseqlib; my @seq = read_fasta(); my $opt = { }; my @out = gjoalignment::dereplicate_aa_align( \@seq, 0.80, "identity", $opt ); print scalar @out, "\n"'
+
+perl < $in -e 'use gjoalignment; use Data::Dumper; use gjoseqlib; my @seq = read_fasta(); my $opt = { }; my @out = gjoalignment::dereplicate_aa_align( \@seq, 0.90, "positives", $opt ); print scalar @out, "\n"'
+
+perl < $in -e 'use gjoalignment; use Data::Dumper; use gjoseqlib; my @seq = read_fasta(); my $opt = { }; my @out = gjoalignment::dereplicate_aa_align( \@seq, 1.95, "nbs", $opt ); print scalar @out, "\n"'
+
+perl < $in -e 'use gjoalignment; use Data::Dumper; use gjoseqlib; my @seq = read_fasta(); my @out = gjoalignment::dereplicate_aa_align_n( \@seq, 350, "identity" ); print scalar @out, "\n"'
+
+perl < $in -e 'use gjoalignment; use Data::Dumper; use gjoseqlib; my @seq = read_fasta(); my @out = gjoalignment::dereplicate_aa_align_n( \@seq, 350, "positives" ); print scalar @out, "\n"'
+
+perl < $in -e 'use gjoalignment; use Data::Dumper; use gjoseqlib; my @seq = read_fasta(); my @out = gjoalignment::dereplicate_aa_align_n( \@seq, 350, "nbs" ); print scalar @out, "\n"'
+
+End_of_dereplicate_aa_align_test_code
+}
+
+#-------------------------------------------------------------------------------
+#
+#  Alignment based on defined similarity threshold
+#
+sub dereplicate_aa_align
+{
+    my $opts = ref( $_[-1] ) eq 'HASH' ? pop : {};
+
+    my ( $align, $similarity, $measure ) = @_;
+    $similarity ||=  0.80;
+    $measure    ||= $opts->{ measure } || 'identity';
+    my $scr_func = seq_pair_score_func( $measure );
+
+    #  Record original sequence order.
+
+    my $index = 0;
+    my %ori_order = map { $_ => ++$index } @$align;
+
+    #  Sort most-to-fewest residues (for prioritizing the sequences kept
+    #  in dereplication).
+
+    my @align = @$align;
+    if ( ! $opts->{ no_reorder } )
+    {
+        my @first = $opts->{ keep_first } ? splice @align, 0, 1 : ();
+        @align = map  { $_->[0] }
+                 sort { $b->[1] <=> $a->[1] }
+                 map  { [ $_, scalar $_->[2] =~ tr/A-Za-z// ] }
+                 @align;
+        unshift @align, @first;
+    }
+
+    my @keep = dereplicate_aa_align_2( \@align, $similarity, $scr_func );
+
+    #  Restore original order
+
+    @align = sort { $ori_order{ $a } <=> $ori_order{ $b } } @keep;
+
+    #  Pack the remaining sequences
+
+    @align = gjoseqlib::pack_alignment( @align )  unless $opts->{ no_pack };
+
+    wantarray ? @align : \@align;
+}
+
+
+#
+#  Alignment of size n
+#
+sub dereplicate_aa_align_n
+{
+    my $opts = ref( $_[-1] ) eq 'HASH' ? pop : {};
+
+    my ( $align, $n, $measure ) = @_;
+    ref( $align ) eq 'ARRAY' && $n > 0
+        or return wantarray ? () : undef;
+    return wantarray ? @$align : $align  if @$align <= $n;
+    $measure ||= 'identity';
+    my ( $scr_func, $upper_bound ) = seq_pair_score_func( $measure );
+    my $lower_bound = 0;
+
+    #  Record original sequence order.
+
+    my $index = 0;
+    my %ori_order = map { $_ => ++$index } @$align;
+
+    #  Sort most-to-fewest residues (for prioritizing the sequences kept
+    #  in dereplication).
+
+    my @align = @$align;
+    if ( ! $opts->{ no_reorder } )
+    {
+        @align = map  { $_->[0] }
+                 sort { $b->[1] <=> $a->[1] }
+                 map  { [ $_, scalar $_->[2] =~ tr/A-Za-z// ] }
+                 @align;
+    }
+
+    my ( $bound, $flag );
+    my $keep = \@align;
+
+    while ( $upper_bound - $lower_bound > 0.001 )
+    {
+        $bound = 0.5 * ( $upper_bound + $lower_bound );
+        ( $keep, $flag ) = dereplicate_bb( $keep, $bound, $n, $scr_func );
+        last if ! $flag;
+        if ( $flag > 0 ) { $upper_bound = $bound }
+        else             { $lower_bound = $bound }
+    }
+
+    #  If $flag is not 0, then $upper_bound gives too many sequences, and
+    #  $lower_bound gives too few sequences.  We will use sequences from the
+    #  larger set to fill out the smaller set to be exactly $n sequences.
+
+    if ( $flag )
+    {
+        #  The first $n+1 members of @$keep will always be part of the upper
+        #  bound set, and we will never need more than $n of the list, so
+        my @upper = @$keep;
+
+        #  Find the lower bound set (which must all be kept)
+        my @keep  = dereplicate_aa_align_2( \@upper, $lower_bound, $scr_func );
+
+        #  Find the candidates for expanding the subset
+        my %kept  = map { $_ => 1 } @keep;
+        my @extra = grep { ! $kept{ $_ } } @upper;
+
+        #  Fill out the kept set to exactly $n sequences
+        my $n_need = $n - @keep;
+        push @keep, splice( @extra, 0, $n_need );
+
+        $keep = \@keep;
+    }
+
+    #  Restore original order
+
+    @align = sort { $ori_order{ $a } <=> $ori_order{ $b } } @$keep;
+
+    #  Pack the remaining sequences
+
+    @align = gjoseqlib::pack_alignment( @align ) unless $opts->{ no_pack };
+
+    wantarray ? @align : \@align;
+}
+
+
+#- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#  Find the scoring function for a given similarity measure keyword.  Can also
+#  return an upper bound on the score value, for use in  the divide and conquer
+#  search for a set of a specified size.
+#
+#      \&score_func                 = seq_pair_score_func( $measure )
+#    ( \&score_func, $upper_bound ) = seq_pair_score_func( $measure )
+#
+#  The resulting scoring function expects two sequences, so:
+#
+#      $score = &$score_func( $seq1,        $seq2        );
+#      $score = &$score_func( $entry1->[2], $entry2->[2] );
+#
+#- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+{
+    my $MatrixObj;
+
+    sub seq_pair_score_func
+    {
+        my $measure = shift || 'identity';
+        my $scr_func;
+        my $upper_bound = 1;
+        if    ( $measure =~ m/nbs/i || $measure =~ m/bit/i )
+        {
+            if ( ! $MatrixObj )
+            {
+                require AminoAcidMatrix;
+                $MatrixObj = AminoAcidMatrix::new();
+            }
+            $scr_func = $measure =~ /2$/ ? sub { $MatrixObj->nbs_of_seqs( gjoseqlib::trim_terminal_gap_columns( @_ ) ) }
+                                         : sub { $MatrixObj->nbs_of_seqs( @_ ) };
+            $upper_bound = 2.4;
+        }
+
+        elsif ( $measure =~ m/pos/i )
+        {
+            if ( ! $MatrixObj )
+            {
+                require AminoAcidMatrix;
+                $MatrixObj = AminoAcidMatrix::new();
+            }
+            $scr_func = $measure =~ /2$/ ? sub { $MatrixObj->pos_of_seqs( gjoseqlib::trim_terminal_gap_columns( @_ ) ) }
+                                         : sub { $MatrixObj->pos_of_seqs( @_ ) };
+        }
+
+        else
+        {
+            $measure =~ m/id/i
+                or print STDERR "Unrecognized similarity measure '$measure'; using 'identity' instead.\n";
+            $scr_func = $measure =~ /2$/ ? \&fraction_aa_identity_2
+                                         : \&fraction_aa_identity;
+        }
+
+        wantarray ? ( $scr_func, $upper_bound ) : $scr_func;
+    }
+}
+
+
+#- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#  This function is not meant to be called directly, but it can be.
+#
+#  This is the core routine for making a dereplicated alignment of amino acid
+#  sequences.  It does not adjust input or output order, and does not
+#  pack the output alignment.
+#
+#      @align = dereplicate_aa_align_2( \@align, $similarity, \&scr_func );
+#     \@align = dereplicate_aa_align_2( \@align, $similarity, \&scr_func );
+#
+#     \@align      is a reference to a list of aligned sequence entries (triples)
+#      $similarity is the highest score that will between any two sequences in
+#                      the dereplicated alignment
+#     \&scr_func   is a reference to a function that takes two sequences and returns
+#                      a similarity measure (D = \&fraction_aa_identity_2)
+#
+#- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+sub dereplicate_aa_align_2
+{
+    my ( $align, $similarity, $scr_func ) = @_;
+    $similarity ||=  0.80;
+    $scr_func   ||= \&fraction_aa_identity_2;
+    my @align = @$align;
+
+    my @keep;
+    my $current;
+    while ( defined( $current = shift @align ) )
+    {
+        push @keep, $current;
+        my $curseq = $current->[2];
+        @align = grep { &$scr_func( $curseq, $_->[2] ) <= $similarity }
+                 @align;
+    }
+
+    wantarray ? @keep : \@keep;
+}
+
+
+#- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#  This function is not meant to be called directly.
+#
+#  Use a bounded test (as in branch and bound) to efficiently decide if a
+#  given similarity bound is too small, too large, or just right to get
+#  a set of $max_n sequences.
+#
+#  If the similarity bound is too small, the number of sequences will be
+#  too small, so return the original set, with the flag -1.
+#
+#  If the similarity bound is too large, the number of sequences will be
+#  too large, so return those kept, and those remaining to be screened, with
+#  the flag 1.
+#
+#      ( \@align, $flag ) = dereplicate_bb( \@align, $bound, $n, \&scr_func )
+#
+#- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+sub dereplicate_bb
+{
+    my ( $align, $bound, $max_n, $scr_func ) = @_;
+    my @align = @$align;
+
+    my @keep;
+    my $current;
+    while ( defined( $current = shift @align ) )
+    {
+        push @keep, $current;
+        my $curseq = $current->[2];
+        @align = grep { &$scr_func( $curseq, $_->[2] ) <= $bound }
+                 @align;
+        if ( @keep          >= $max_n && @align ) { return ( [ @keep, @align ], 1 ) }  # too many
+        if ( @keep + @align <  $max_n           ) { return (   $align,         -1 ) }  # too few
+    }
+
+    [ \@keep, 0 ];
+}
+
+
+#===============================================================================
 #  Extract a representative set from an alignment
 #
 #     @alignment = representative_alignment( \@alignment, \%options );
 #    \@alignment = representative_alignment( \@alignment, \%options );
 #
+#  ( \@align1, \@align2, ... ) = representative_alignment( \@alignment, { cluster => $ident, %opts } );
+#  [ \@align1, \@align2, ... ] = representative_alignment( \@alignment, { cluster => $ident, %opts } );
+#
 #  Options:
 #
+#     cluster =>   $fract_ident           # produce similarity clusters at fract_ident;
+#                                         #     excludes keep, max_sim and min_sim
 #     keep    =>   $id                    # keep this sequence unconditionally
 #     keep    =>  \@ids                   # keep these sequences unconditionally
 #     max_sim =>   $fract_ident           # maximum identity to retained sequences (D = 0.8)
 #     min_sim => [ $fract_ident,  @ids ]  # remove sequences more diverged than
 #     min_sim => [ $fract_ident, \@ids ]  # remove sequences more diverged than
 #                                         #     this identity to these refs
-#    nopack   =>   $bool                  # do not pack the resulting alignment
+#     nopack  =>   $bool                  # do not pack the resulting alignment
+#     nuc     =>   $bool                  # analyze as nucleotides (D = protein)
 #
 #  If the greatest identity is <= max_id, then it is a new similarity group.
 #  If the greatest identity is <= ext_id, then it is an extra rep of an
@@ -1524,10 +2102,25 @@ sub representative_alignment
 
     $opts = {} unless $opts && ref($opts) eq 'HASH';
 
-    my $max_id = $opts->{ max_sim } || 0.8;
+    my $cluster = $opts->{ cluster };
+    if ( $cluster )
+    {
+        $cluster > 0 && $cluster < 1
+            or print STDERR "Invalid cluster fraction identity: $cluster\n"
+                and return undef;
+
+        print STDERR "cluster option conflicts with max_sim; ignoring the latter.\n"  if ( $opts->{ max_sim } );
+        print STDERR "cluster option conflicts with min_sim; ignoring the latter.\n"  if ( $opts->{ min_sim } );
+        print STDERR "cluster option conflicts with keep; ignoring the latter.\n"     if ( $opts->{ keep } );
+    }
+
+    my $max_id = $cluster || $opts->{ max_sim } || 0.8;
+    $max_id > 0 && $max_id < 1
+        or print STDERR "Invalid value of max_sim: $max_id\n"
+            and return undef;
     my $ext_id = $max_id ** 0.8;
 
-    my $keep = $opts->{ keep };
+    my $keep = ! $cluster && $opts->{ keep };
     my %keep;
     if ( $keep )
     {
@@ -1535,10 +2128,18 @@ sub representative_alignment
                 ( ref( $keep ) eq 'ARRAY' ) ? @$keep : $keep;
     }
 
+    my $min_opt = ! $cluster && $opts->{ min_sim };
+    ! $min_opt || ( $min_opt > 0 && $min_opt <= $max_id )
+        or print STDERR "Invalid value of min_sim: $min_opt\n"
+            and return undef;
+
+    my $nuc = $opts->{ nuc } || $opts->{ nucl } || $opts->{ nucleotide };
+
+    my $nopack = $opts->{ nopack } || $opts->{ no_pack };
+
     #  Remove sequences of low similarity to specified references
 
     my @align;
-    my $min_opt = $opts->{ min_sim };
     if ( $min_opt && ( ref($min_opt) eq 'ARRAY' ) && @$min_opt > 1 )
     {
         my ( $min_sim, @ref_ids ) = @$min_opt;
@@ -1557,7 +2158,8 @@ sub representative_alignment
 
                 foreach ( @ref_seq )
                 {
-                    my $ident = fraction_aa_identity( $aln_seq->[2], $_->[2] );
+                    my $ident = $nuc ? fraction_nt_identity( $aln_seq->[2], $_->[2] )
+                                     : fraction_aa_identity( $aln_seq->[2], $_->[2] );
                     if ( $ident && ( $ident >= $min_sim ) )
                     {
                         push @align, $aln_seq;
@@ -1586,7 +2188,7 @@ sub representative_alignment
     #  Reorder the sequences for those with the most residues in columns
     #  that other sequences also use.
 
-    @align = reorder_by_useful_residues( \@align );
+    @align = reorder_by_useful_residues( \@align, { protein => ! $nuc, nucleotide => $nuc } );
 
     my %id_to_group;
     my @groups;
@@ -1597,8 +2199,9 @@ sub representative_alignment
         my $status = 0;      #  Highest identity so far, or 2 for redundant
         foreach ( @reps )
         {
-            #  ( $nid/$nmat ) = fraction_aa_identity( $seq1, $seq2 )
-            my $ident = fraction_aa_identity( $try->[2], $_->[2] ) || 0;
+            #  ( $nid/$nmat ) = fraction_identity( $seq1, $seq2 )
+            my $ident = $nuc ? fraction_nt_identity( $try->[2], $_->[2] ) || 0
+                             : fraction_aa_identity( $try->[2], $_->[2] ) || 0;
 
             #  Too similar for extra rep of group; add to group of sim sequence
             if ( $ident > $ext_id )
@@ -1631,6 +2234,20 @@ sub representative_alignment
         }
     }
 
+    #  With clusters, we return all the members of each group
+
+    if ( $cluster )
+    {
+        unless ( $nopack )
+        {
+            foreach my $group ( @groups )
+            {
+                @$group = gjoseqlib::pack_alignment( $group );
+            }
+        }
+        return wantarray ? @groups : \@groups;
+    }
+
     #  Okay, we now need to pick one or more representatives from each
     #  similarity cluster.
 
@@ -1659,7 +2276,7 @@ sub representative_alignment
             map  { [ $_, $order{ $_->[0] } ] }   #  tag entry with order
             grep { $is_rep{ $_->[0] } } @align;  #  filter for reps
 
-    @reps = gjoseqlib::pack_alignment( \@reps ) unless $opts->{ nopack };
+    @reps = gjoseqlib::pack_alignment( \@reps ) unless $nopack;
     
     wantarray ? @reps : \@reps;
 }
@@ -1713,6 +2330,54 @@ sub filter_by_similarity
 }
 
 
+#===============================================================================
+#  Remove divergent sequences from an alignment
+#
+#     @alignment = filter_by_nt_identity( \@align, $min_sim, @id_def_seq );
+#    \@alignment = filter_by_nt_identity( \@align, $min_sim, @id_def_seq );
+#
+#     @alignment = filter_by_nt_identity( \@align, $min_sim, @ids );
+#    \@alignment = filter_by_nt_identity( \@align, $min_sim, @ids );
+#
+#===============================================================================
+
+sub filter_by_nt_identity
+{
+    my ( $align, $min_sim ) = splice @_, 0, 2;
+
+    return undef unless gjoseqlib::is_array_of_sequence_triples( $align );
+    return wantarray ? @_ : [ @_ ]  unless @_ && $_[0] && $min_sim && $min_sim > 0;
+
+    my @ref_seq;
+    if ( ref( $_[0] ) eq 'ARRAY' )
+    {
+        @ref_seq = @_;
+    }
+    else
+    {
+        my %ref_ids = map { $_->[0] => 1 } @_;
+        @ref_seq = map { $ref_ids{ $_->[0] } ? $_ : () } @$align;
+        return wantarray ? @_ : [ @_ ]  unless @ref_seq;
+    }
+
+    my @are_sim;
+    foreach my $aln_seq ( @$align )
+    {
+        foreach ( @ref_seq )
+        {
+            my $ident = fraction_nt_identity( $aln_seq->[2], $_->[2] );
+            if ( $ident && ( $ident >= $min_sim ) )
+            {
+                push @are_sim, $aln_seq;
+                last;
+            }
+        }
+    }
+
+    wantarray ? @are_sim : \@are_sim;
+}
+
+
 #-------------------------------------------------------------------------------
 #  Reorder sequences in an alignment, prioritized by the residues per column
 #  of the columns in which the sequence has unambiguous residues.  That is,
@@ -1738,10 +2403,12 @@ sub reorder_by_useful_residues
 
     $opts = {} unless $opts && ref( $opts ) eq 'HASH';
 
-    my $aa = $opts->{ protein };
+    my $aa = $opts->{ protein } || $opts->{ prot };
     my $nt = $opts->{ rna } || $opts->{ RNA }
           || $opts->{ dna } || $opts->{ DNA }
-          || $opts->{ nucleotide };
+          || $opts->{ nucleotide }
+          || $opts->{ nucl }
+          || $opts->{ nuc };
 
     if ( ! ( $aa || $nt ) )
     {

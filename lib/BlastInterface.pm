@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2003-2015 University of Chicago and Fellowship
+# Copyright (c) 2003-2016 University of Chicago and Fellowship
 # for Interpretations of Genomes. All Rights Reserved.
 #
 # This file is part of the SEED Toolkit.
@@ -64,13 +64,54 @@ use gjoparseblast;
 #     \@matches = rpstblastn( $query, $db, \%options )
 #
 #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#  Functions to extract commonly used quantities from an hsp:
+#
+#      $identity   = hsp_fract_id( $hsp );
+#      $positives  = hsp_fract_pos( $hsp );
+#      $nbs        = hsp_nbs( $hsp );
+#      $q_coverage = hsp_q_cover( $hsp );
+#      $s_coverage = hsp_s_cover( $hsp );
+#
+#      $q_dir      = hsp_q_dir( $hsp );
+#      $s_dir      = hsp_s_dir( $hsp );
+#
+#  Define frame relative to the start of the contig, when reading in the same
+#  direction as the feature.  So, a negative strand match starting at the end
+#  of the contig will be frame -1.  This is consistant with blast.
+#
+#      $q_frame    = hsp_q_frame( $hsp );
+#      $s_frame    = hsp_s_frame( $hsp );
+#
+#- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#  Clean (purify) a multiple sequence alignment for use as a profile. The output
+#  alignment will satisfy the following:
+#
+#      1. Alignment start will be covered by a specified fraction of the sequences (D >= 0.25)
+#      2. Sequences will differ from one-another by a specified amount; D <= 0.85 identity,
+#             but fraction positives or normalized bit score can also be specified
+#      3. Sequences with match the profile with a specified e-value (D <= 1e-4)
+#      4. Sequences will match the profile with a specified nbs (D <= 0.35)
+#      5. Sequences will match at least a specified fraction of the profile length (D > 0.80)
+#
+#  There is significant overlap in functionality with psiblast_in_msa(), but
+#  they are not equivalent.  purify_msa() is primarily a sanity check of the
+#  msa itself, while psiblast_in_msa() is primarily for handling the complex
+#  interactions between then -in_msa option and other psiblast command parameters.
+#  If maintaining a particular sequence in the output is important, 
+#
+#     @align = purify_msa( \@align, \%options )
+#    \@align = purify_msa( \@align, \%options )
+#
+#- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #  Fix a multiple sequence alignment to be appropriate for a psiblast
 #  -in_msa file.
 #
-#      ( $msa_name, \%opts, $rm_msa ) = psiblast_in_msa(  $align_file, \%opts )
-#      ( $msa_name, \%opts, $rm_msa ) = psiblast_in_msa( \@alignment,  \%opts )
-#      ( $msa_name, \%opts, $rm_msa ) = psiblast_in_msa( \*ALIGN_FH,   \%opts )
+#      ( $msa_path, \%opts ) = psiblast_in_msa(  $align_file, \%opts )
+#      ( $msa_path, \%opts ) = psiblast_in_msa( \@alignment,  \%opts )
+#      ( $msa_path, \%opts ) = psiblast_in_msa( \*ALIGN_FH,   \%opts )
 #
+#  This function used to return a third value, which would always be true,
+#  indicating that the returned file was a copy, and could be deleted.
 #
 #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #  Convert a multiple sequence alignment into a PSSM file suitable for the
@@ -83,7 +124,7 @@ use gjoparseblast;
 #      $db_name = alignment_to_pssm( \*ALIGN_FH,   \%options )
 #
 #  The first argument supplies the MSA to be converted. It can be a list of
-#  sequence triple, a file name, or an open file handle.
+#  sequence triples, a file name, or an open file handle.
 #
 #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #  Build an RPS database from a list of alignments and/or alignment files
@@ -92,6 +133,21 @@ use gjoparseblast;
 #
 #  The first argument supplies the list of alignments and/or alignment files.
 #  The second argument supplies the file name for the created database.
+#
+#- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#  Read a PSSM
+#
+#      ( $seq, $mat, $lambda, $kappa, $h, $id, $title ) = read_smp(          );  # STDIN
+#      ( $seq, $mat, $lambda, $kappa, $h, $id, $title ) = read_smp(  $file   );
+#      ( $seq, $mat, $lambda, $kappa, $h, $id, $title ) = read_smp( \*FH     );
+#      ( $seq, $mat, $lambda, $kappa, $h, $id, $title ) = read_smp( \$string );
+#
+#   $seq   is the master sequence
+#   $mat   is a reference to a list of the position-specific residue scores
+#   $lambda and $kappa are the scoring factors
+#   $h     is the residue entropy of the matrix
+#   $id    is the id of the matrix
+#   $title is the title of the matrix
 #
 #===============================================================================
 #
@@ -159,6 +215,8 @@ use gjoparseblast;
 #      db_gen_code        => genetic code for DB sequences [D = 1]
 #      dbCode             => genetic code for DB sequences [D = 1]
 #      dbGenCode          => genetic code for DB sequences [D = 1]
+#      parse_seqids       => parse database sequence ids when database does not exist
+#      parseSeqIds        => parse database sequence ids when database does not exist
 #
 #  Output filtering:
 #
@@ -166,6 +224,8 @@ use gjoparseblast;
 #      excludeSelf        => suppress reporting matches of ID to itself (D = 0)
 #      includeSelf        => force reporting of matches of ID to itself (D = 1)
 #      maxE               => maximum E-value [D = 0.01]
+#      max_hsp            => maximum number of returned HSPs (before filtering)
+#      maxOffset          => maximum fraction shift between subject and query
 #      maxHSP             => maximum number of returned HSPs (before filtering)
 #      minCovQ            => minimum fraction of query covered by match
 #      minCovS            => minimum fraction of the DB sequence covered by the match
@@ -224,11 +284,15 @@ use gjoparseblast;
 #      iterations         => number of psiblast iterations
 #      msa_master_id      => ID of the sequence in in MSA for psiblast to use as a master
 #      msa_master_idx     => 1-based index of the sequence in MSA for psiblast to use as a master
+#      msaMasterId        => ID of the sequence in in MSA for psiblast to use as a master
+#      msaMasterIdx       => 1-based index of the sequence in MSA for psiblast to use as a master
 #      num_iterations     => number of psiblast iterations
 #      out_ascii_pssm     => name of output file to store the ASCII version of PSSM
 #      out_pssm           => name of output file to store PSSM
 #      outForm            => 'sim' => return Sim objects [D]; 'hsp' => return HSPs (as defined in gjoparseblast.pm)
 #      outPSSM            => name of output file to store PSSM
+#      out_form           => 'sim' => return Sim objects [D]; 'hsp' => return HSPs (as defined in gjoparseblast.pm)
+#      out_pssm           => name of output file to store PSSM
 #      phi_pattern        => filename containing pattern to search in psiblast
 #      profile_dir        => place to put the PSSM's use in an RPS blast db.
 #      pseudocount        => pseudo-count value used when constructing PSSM in psiblast
@@ -284,6 +348,8 @@ use gjoparseblast;
 #      matrix             => amino acid comparison matrix [D = BLOSUM62]
 #      max_intron_length  => maximum intron length in joining translated alignments
 #      maxE               => maximum E-value [D = 0.01]
+#      max_hsp            => maximum number of returned HSPs (before filtering)
+#      maxOffset          => maximum fraction shift between subject and query
 #      maxHSP             => maximum number of returned HSPs (before filtering)
 #      maxIntronLength    => maximum intron length in joining translated alignments
 #      minCovQ            => minimum fraction of query covered by match
@@ -292,6 +358,8 @@ use gjoparseblast;
 #      minNBScr           => minimum normalized bit-score (bit-score per alignment position)
 #      minPos             => fraction of aligned residues with positive score
 #      minScr             => minimum required bit-score
+#      msaMasterId        => ID of the sequence in in MSA for psiblast to use as a master
+#      msaMasterIdx       => 1-based index of the sequence in MSA for psiblast to use as a master
 #      msa_master_id      => ID of the sequence in in MSA for psiblast to use as a master
 #      msa_master_idx     => 1-based index of the sequence in MSA for psiblast to use as a master
 #      nucIdenScr         => score (>0) for identical nucleotides [D = 1]
@@ -302,6 +370,7 @@ use gjoparseblast;
 #      numAlignments      => maximum number of returned HSPs (before filtering)
 #      numThreads         => number of threads that can be run in parallel
 #      out_ascii_pssm     => name of output file to store the ASCII version of PSSM
+#      out_form           => 'sim' => return Sim objects [D]; 'hsp' => return HSPs (as defined in gjoparseblast.pm)
 #      out_pssm           => name of output file to store PSSM
 #      outForm            => 'sim' => return Sim objects [D]; 'hsp' => return HSPs (as defined in gjoparseblast.pm)
 #      outPSSM            => name of output file to store PSSM
@@ -401,7 +470,7 @@ sub blast
 
     my $okay;
 
-    my $pssm = -s ( $opts->{ in_pssm } || $opts->{ inPSSM } );
+    my $pssm = -s ( $opts->{ in_pssm } || $opts->{ inPSSM } || '' );
     if ( $pssm && ( $blast_prog eq 'psiblast' || $blast_prog eq 'tblastn' ) )
     {
         if ( $query )
@@ -511,6 +580,94 @@ sub    tblastx { &blast( $_[0], $_[1],     'tblastx', $_[2] ) }
 sub  psiblast  { &blast( $_[0], $_[1],   'psiblast',  $_[2] ) }
 sub  rpsblast  { &blast( $_[0], $_[1],   'rpsblast',  $_[2] ) }
 sub rpstblastn { &blast( $_[0], $_[1],  'rpstblastn', $_[2] ) }
+
+
+#-------------------------------------------------------------------------------
+#  Functions to extract commonly used quantities from an hsp:
+#
+#      $identity   = hsp_fract_id( $hsp );
+#      $positives  = hsp_fract_pos( $hsp );
+#      $nbs        = hsp_nbs( $hsp );
+#      $q_coverage = hsp_q_cover( $hsp );
+#      $s_coverage = hsp_s_cover( $hsp );
+#
+#      $q_dir      = hsp_q_dir( $hsp );
+#      $s_dir      = hsp_s_dir( $hsp );
+#
+#  Define frame relative to the start of the contig, when reading in the same
+#  direction as the feature.  So, a negative strand match starting at the end
+#  of the contig will be frame -1.  This is how blast does it, but it means
+#  that the relationships between forward and reverse frames change with the
+#  sequence length.
+#
+#      $q_frame    = hsp_q_frame( $hsp );
+#      $s_frame    = hsp_s_frame( $hsp );
+#
+#  Offset will be defined as the minimum of the beginning and ending extensions
+#  of the query and subject (or subject and query, as appropriate).  The
+#  fractional offset is the offset divided by the minimum sequence length.
+#
+#                         q1                     q2
+#           |<- e1 ->|    |                      |
+#           --------------------------------------------
+#                         ||||||||||||||||||||||||
+#                     --------------------------------------------
+#                         |                      |      |<- e2 ->|
+#                         s1                     s2
+#
+#    hsp_offset_n = max( ( e1, e2 )
+#                 = max( ( q1 >= s1 ? min( q1 - s1, ( slen - s2 ) - ( qlen - q2 ) )
+#                                   : min( s1 - q1, ( qlen - q2 ) - ( slen - s2 ) )
+#                        ),
+#                        0
+#                      );
+#
+#  If one sequence is wholly mapped within the other, the offset is 0.  This
+#  should only be used with blastp (or blastn), otherwise the results will be
+#  meaningless.
+#
+#      $offset     = hsp_offset_n( $hsp );  # as a number of sequence positions
+#      $offset     = hsp_offset_f( $hsp );  # as a fraction of sequence length
+#
+#-------------------------------------------------------------------------------
+
+sub hsp_fract_id  { $_[0]->[11] / $_[0]->[10] }
+sub hsp_fract_pos { $_[0]->[12] / $_[0]->[10] }
+sub hsp_nbs       { $_[0]->[ 6] / $_[0]->[10] }
+sub hsp_q_cover   { ( abs( $_[0]->[16] - $_[0]->[15]) + 1 ) / $_[0]->[2] }
+sub hsp_s_cover   { ( abs( $_[0]->[19] - $_[0]->[18]) + 1 ) / $_[0]->[5] }
+
+sub hsp_q_mid     { 0.5 * ( $_[0]->[15] + $_[0]->[16] ) }
+sub hsp_s_mid     { 0.5 * ( $_[0]->[18] + $_[0]->[19] ) }
+
+sub hsp_q_dir     { $_[0]->[16] <=> $_[0]->[15] }
+sub hsp_s_dir     { $_[0]->[19] <=> $_[0]->[18] }
+
+sub hsp_q_frame
+{
+    my $qbeg = $_[0]->[15];
+    $_[0]->[16] >= $qbeg ?    ( $qbeg      - 1     ) % 3 + 1
+                         : -( ( $_[0]->[2] - $qbeg ) % 3 + 1 );
+}
+
+sub hsp_s_frame
+{
+    my $sbeg = $_[0]->[18];
+    $_[0]->[19] >= $sbeg ?    ( $sbeg      - 1     ) % 3 + 1
+                         : -( ( $_[0]->[5] - $sbeg ) % 3 + 1 );
+}
+
+sub hsp_offset_n
+{
+    local $_ = $_[0];
+    max( ( $_->[15] >= $_->[18] ? min( $_->[15] - $_->[18], ( ( $_->[5] - $_->[19] ) - ( $_->[2] - $_->[16] ) ) )
+                                : min( $_->[18] - $_->[15], ( ( $_->[2] - $_->[16] ) - ( $_->[5] - $_->[19] ) ) )
+         ),
+         0
+       );
+}
+
+sub hsp_offset_f { hsp_offset_n( $_[0] ) / min( $_[0]->[2], $_[0]->[5] ) }
 
 
 #-------------------------------------------------------------------------------
@@ -803,17 +960,20 @@ sub build_rps_db
 #
 #  Options:
 #
-#      file        => $file       #  Use pssm_file instead
 #      profile_dir => $dir        #  If profiles are being build, put them here
 #      pssm_file   => $file       #  The file name for the output pssm
 #      pssm_suffix => $extension  #  Profile file name extension (D = ".smp")
-#      suffix      => $extension  #  Use pssm_suffix instead
 #
 #  Expert options:
 #
 #      matrix      => $mat_name   #  Specify the scoring matrix (D = BLOSUM62)
-#      scale       => $float      #  Scaling of scores (D = 100)
 #      threshold   => $float      #  Threshold score for word index (D = 9.82)
+#
+#  Deprecated options:
+#
+#      file        => $file       #  Use pssm_file option instead
+#      scale       => $float      #  NCBI psiblast no longer supports pssm scaling
+#      suffix      => $extension  #  Use pssm_suffix option instead
 #
 #-------------------------------------------------------------------------------
 
@@ -939,63 +1099,82 @@ sub verify_pssm
 #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #  Read the id and title from a PSSM file.
 #
-#    $title = pssm_id_title( $pssm_file, \%opts )
+#    $title = pssm_id_title(  $pssm_file, \%opts )  #  file
+#    $title = pssm_id_title( \$pssm,      \%opts )  #  string reference
+#    $title = pssm_id_title( \*pssmFH,    \%opts )  #  open file handle
+#    $title = pssm_id_title(              \%opts )  #  STDIN
 #
 #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 sub pssm_id_title
 {
-    my ( $pssm, $opts ) = @_;
-    my ( $id, $title );
+    my $opts = ref( $_[-1] ) eq 'HASH' ? pop : {};
+    my $smp = shift;
 
-    if ( $pssm && -s $pssm && open( PSSM, '<', $pssm ) )
+    my ( $fh, $close );
+    if ( ! $smp )
     {
-        while ( <PSSM> )
+        $fh = \*STDIN;
+    }
+    elsif ( ref( $smp ) eq 'GLOB' )
+    {
+        $fh = $smp;
+    }
+    elsif ( ref( $smp ) eq 'SCALAR' || ( ! ref( $smp ) && -s $smp ) )
+    {
+        open( $fh, '<', $smp )
+            or print STDERR "Could not open PSSM file '$smp'\n"
+                and return ();
+        $close = 1;
+    }
+
+    my ( $id, $title );
+    local $_;
+    while ( <$fh> )
+    {
+        if    ( ! $id && /^\s+id \{/ )
         {
-            if    ( ! $id && /^\s+id \{/ )
+            $_ = <$fh>;
+            chomp;
+            if ( s/^\s+local (?:id|str) // )
             {
-                $_ = <PSSM>;
-                chomp;
-                if ( s/^\s+local (?:id|str) // )
-                {
-                    s/""/"/g;
-                    s/^"//;
-                    s/"$//;
-                    $id = "lcl|$_";
-                }
-                elsif ( /\s+general / )
-                {
-                    $_ = <PSSM>;
-                    chomp;
-                    ( $id ) = / db "(.+)"$/;
-                    $_ = <PSSM>;
-                    chomp;
-                    s/^\s+tag (?:id|str) //;
-                    s/""/"/g;
-                    s/^"//;
-                    s/"$//;
-                    $id = $id ? "$id|$_" : $_;
-                    $id = "gnl|$id";
-                }
+                s/""/"/g;
+                s/^"//;
+                s/"$//;
+                $id = "lcl|$_";
             }
-            elsif ( s/^\s+title\s+// )
+            elsif ( /\s+general / )
             {
+                $_ = <$fh>;
                 chomp;
-                $title = $_;
-                #  Read until the line ends with an odd number of "'s
-                #  (the substring extraction works fine for length 0):
-                while ( ( length((/("*)$/)[0]) % 2 == 0 ) && defined($_ = <PSSM>) )
-                {
-                    chomp;
-                    $title .= $_;
-                }
-                $title =~ s/""/"/g;  # Remove embedded quotes
-                $title =~ s/^"//;    # Remove openning quote
-                $title =~ s/"$//;    # Remove closing quote
-                last;
+                my ( $db ) = / db "(.+)"$/;
+                $_ = <$fh>;
+                chomp;
+                s/^\s+tag (?:id|str) //;
+                s/""/"/g;
+                s/^"//;
+                s/"$//;
+                $id = $db ? "gnl|$db|$_" : "gnl|$_";
             }
         }
-        close( PSSM );
+        elsif ( s/^\s+title\s+// )
+        {
+            chomp;
+            $title = $_;
+            #  Read until the line ends with an odd number of "'s
+            #  (the substring extraction works fine for length 0):
+            while ( ( length((/("*)$/)[0]) % 2 == 0 ) && defined($_ = <$fh>) )
+            {
+                chomp;
+                $title .= $_;
+            }
+            $title =~ s/""/"/g;  # Remove embedded quotes
+            $title =~ s/^"//;    # Remove openning quote
+            $title =~ s/"$//;    # Remove closing quote
+            last;
+        }
     }
+
+    close( $fh )  if $close;
 
     ( $id, $title );
 }
@@ -1007,36 +1186,256 @@ sub pssm_id_title
 #    $title = pssm_title( $pssm_file, \%opts )
 #
 #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-sub pssm_title
-{
-    my ( $pssm, $opts ) = @_;
-    my $title;
 
-    if ( $pssm && -s $pssm && open( PSSM, '<', $pssm ) )
+sub pssm_title { ( pssm_id_title( @_ ) )[1] }
+
+
+#-------------------------------------------------------------------------------
+#  Read a PSSM
+#
+#      ( $seq, $mat, $lambda, $kappa, $h, $id, $title ) = read_smp(           \%opts );  # STDIN
+#      ( $seq, $mat, $lambda, $kappa, $h, $id, $title ) = read_smp(  $file,   \%opts );
+#      ( $seq, $mat, $lambda, $kappa, $h, $id, $title ) = read_smp( \*FH,     \%opts );
+#      ( $seq, $mat, $lambda, $kappa, $h, $id, $title ) = read_smp( \$string, \%opts );
+#
+#     \%key_value_pairs = read_smp(           \%opts );  # STDIN
+#     \%key_value_pairs = read_smp(  $file,   \%opts );
+#     \%key_value_pairs = read_smp( \*FH,     \%opts );
+#     \%key_value_pairs = read_smp( \$string, \%opts );
+#
+#      $seq    is the master sequence
+#      @$mat   is a list of the position-specific residue scores (see list below)
+#      $lambda is the score scaling factor
+#      $kappa  is the search space size scoring factor
+#      $h      is the residue entropy of the matrix
+#      $id     is the id of the matrix
+#      $title  is the title of the matrix
+#
+#   Options:
+#
+#       bits      => $bool   # convert the matrix to bits ( score * lambda / ln(2) )
+#       bit_score => $bool   # convert the matrix to bits ( score * lambda / ln(2) )
+#
+#  NCBI smp file residue scores (unknown means that I do not know, but the
+#  scores are always -32768, so they are very bad).  Based on ncbistdaa
+#  http://web.mit.edu/seven/src/ncbi/data/seqcode.prt
+#  The matrix value for gap is clearly not used by the programs, it is a match killer
+#
+#      0  \000  -
+#      1  \001  A
+#      2  \002  B
+#      3  \003  C
+#      4  \004  D
+#      5  \005  E
+#      6  \006  F
+#      7  \007  G
+#      8  \010  H
+#      9  \011  I
+#     10  \012  K
+#     11  \013  L
+#     12  \014  M
+#     13  \015  N
+#     14  \016  P
+#     15  \017  Q
+#     16  \020  R
+#     17  \021  S
+#     18  \022  T
+#     19  \023  V
+#     20  \024  W
+#     21  \025  X
+#     22  \026  Y
+#     23  \027  Z
+#     24  \030  U
+#     25  \031  *
+#     26  \032  unknown
+#     27  \033  unknown
+#
+#     S' = (lambda * S - ln(K) ) / ln(2)
+#     E  = m * n * K * exp( -lambda * S )
+#        = m * n * 2 ** (-S')
+#
+#-------------------------------------------------------------------------------
+
+
+our @pssm_aa_order = qw( - A B C D E F G H I K L M N P Q R S T V W X Y Z U * . . );
+
+
+sub read_smp
+{
+    my $opts = ref $_[-1] eq 'HASH' ? pop : {};
+    my ( $fh, $close ) = input_file_handle( @_ );
+
+    my $state;
+    my $nrow;
+    my $npos;
+    my $seq;
+    my $col = [];
+    my @mat;
+    my ( $id, $title );
+    my ( $lambda, $kappa, $h );
+
+    while ( <$fh> )
     {
-        while ( <PSSM> )
+        chomp;
+        if    ( $state == 2 )
         {
-            if ( s/^\s+title\s+// )
+            if ( / (-?\d+)/ )
             {
+                push @$col, $1 + 0;
+                if ( @$col == $nrow ) { push @mat, $col; $col = [] }
+            }
+            else
+            {
+                $state = 0;
+            }   
+        }
+
+        elsif ( $state && / scores /  ) { $state =  2 }
+        elsif ( / finalData /         ) { $state =  1 }
+        elsif ( / numRows (\d+),/     ) { $nrow  = $1 }
+        elsif ( / numColumns (\d+),/  ) { $npos  = $1 }
+        elsif ( ! $id && /^\s+id \{/  )
+        {
+            $_ = <$fh>;
+            chomp;
+            if ( s/^\s+local (?:id|str) // )
+            {
+                s/""/"/g;
+                s/^"//;
+                s/"$//;
+                $id = "lcl|$_";
+            }
+            elsif ( /\s+general / )
+            {
+                $_ = <$fh>;
                 chomp;
-                $title = $_;
-                #  Read until the line ends with an odd number of "'s
-                #  (the substring extraction works fine for length 0):
-                while ( ( length((/("*)$/)[0]) % 2 == 0 ) && defined($_ = <PSSM>) )
-                {
-                    chomp;
-                    $title .= $_;
-                }
-                $title =~ s/""/"/g;  # Remove embedded quotes
-                $title =~ s/^"//;    # Remove openning quote
-                $title =~ s/"$//;    # Remove closing quote
-                last;
+                my ( $db ) = / db "(.+)"$/;
+                $_ = <$fh>;
+                chomp;
+                s/^\s+tag (?:id|str) //;
+                s/""/"/g;
+                s/^"//;
+                s/"$//;
+                $id = $db ? "gnl|$db|$_" : "gnl|$_";
             }
         }
-        close( PSSM );
+        elsif ( s/^\s+title\s+// )
+        {
+            chomp;
+            $title = $_;
+            #  Read until the line ends with an odd number of "'s
+            #  (the substring extraction works fine for length 0):
+            while ( ( length((/("*)$/)[0]) % 2 == 0 ) && defined($_ = <$fh>) )
+            {
+                chomp;
+                $title .= $_;
+            }
+            $title =~ s/""/"/g;  # Remove embedded quotes
+            $title =~ s/^"//;    # Remove openning quote
+            $title =~ s/"$//;    # Remove closing quote
+        }
+        elsif ( s/^ +seq-data \S+ "// )
+        {
+            $seq = $_;
+            while ( ! ( $seq =~ s/"$// ) && defined( $_ = <$fh> ) )
+            {
+                chomp;
+                $seq .= $_;
+            }
+    
+            length( $seq ) == $npos
+                or die "Master sequence length does not match matrix columns.";
+        }
+        elsif ( / lambda \{ (\d+), 10, (-?\d+) \}/ ) { $lambda = $1 * 10**$2 }
+        elsif ( / kappa \{ (\d+), 10, (-?\d+) \}/  ) { $kappa  = $1 * 10**$2 }
+        elsif ( / h \{ (\d+), 10, (-?\d+) \}/      ) { $h      = $1 * 10**$2 }
     }
 
-    $title;
+    @mat == $npos
+        or die "Number of PSSM positions read does not match matrix columns.";
+
+    close( $fh ) if $close;
+
+    #  Does the user want the matrix scores in bits?
+
+    if ( $opts->{ bit_score } || $opts->{ bits } )
+    {
+        my $lambda_pr = $lambda / log(2);
+        foreach ( @mat ) { foreach ( @$_ ) { $_ *= $lambda_pr } }
+    }
+
+    wantarray ? ( $seq, \@mat, $lambda, $kappa, $h, $id, $title )
+              : { entropy  =>  $h,
+                  id       =>  $id,
+                  kappa    =>  $kappa,
+                  lambda   =>  $lambda,
+                  master   =>  $seq,
+                  matrix   => \@mat,
+                  residues => [ @pssm_aa_order ],
+                  title    =>  $title
+                 };
+}  
+
+
+#-------------------------------------------------------------------------------
+#  Find position specific scores for pssm hsp alignment
+#
+#     @position_scores = score_pssm_hsp( $hsp, $matrix )
+#    \@position_scores = score_pssm_hsp( $hsp, $matrix )
+#
+#  Typically the matrix is read using something like:
+#
+#     my ( $master_seq, $matrix, $lambda, $kappa, $h, $id, $title ) = BlastInterface::read_smp( $file );
+#
+#  or
+#
+#     my $matrix = ( BlastInterface::read_smp( $file ) )[1];
+#
+#  For bit scores, the raw scores need to be multiplied by $lambda / ln(2)
+#-------------------------------------------------------------------------------
+
+sub aa_seq_2_pssm_index
+{
+    local $_ = $_[0];
+    #  All but valid amino acid characters go to terminator score
+    tr[AC-IK-NP-TV-Yac-ik-np-tv-y]
+      [\031]c;
+    #    *
+
+    #  Amino acids go to pssm score matrix index
+    tr[AC-IK-NP-TV-Yac-ik-np-tv-y]
+      [\001\003\004\005\006\007\010\011\012\013\014\015\016\017\020\021\022\023\024\025\026\001\003\004\005\006\007\010\011\012\013\014\015\016\017\020\021\022\023\024\025\026];
+    #    A   C   D   E   F   G   H   I   K   L   M   N   P   Q   R   S   T   V   W   X   Y   A   C   D   E   F   G   H   I   K   L   M   N   P   Q   R   S   T   V   W   X   Y
+
+    $_;
+}
+
+
+sub score_pssm_hsp
+{
+    my ( $hsp, $matrix ) = @_;
+    my ( $qb, $qaln, $saln ) = @$hsp[15,17,20];
+    my $gap_scr = $matrix->[0]->[25];  # terminator score
+    my @indices = map { ord($_) }
+                  split //, aa_seq_2_pssm_index( $saln );
+    my $mat_ind = $qb - 1;
+    my $aln_ind_max = length( $qaln ) - 1;
+    my @scores;
+    for ( my $aln_ind = 0; $aln_ind <= $aln_ind_max; $aln_ind++ )
+    {
+        my $q_res = substr( $qaln, $aln_ind, 1 );
+        if ( $q_res ne '-' )
+        {
+            push @scores, $matrix->[ $mat_ind ]->[ $indices[ $aln_ind ] ];
+            $mat_ind++;
+        }
+        else
+        {
+            push @scores, $gap_scr;
+        }
+    }
+
+    wantarray ? @scores : \@scores;
 }
 
 
@@ -1051,17 +1450,22 @@ sub pssm_title
 #      $pssm_file = alignment_to_pssm( \*ALIGN_FH,   \%options )
 #
 #  The first argument supplies the MSA to be converted. It can be a list of
-#  sequence triple, a file name, or an open file handle.
+#  sequence triples, a file name, or an open file handle.
 #
 #  General options:
 #
+#    out_pssm    =>  $file   #  output PSSM file name (D = STDOUT)
+#    out_pssm    => \*FH     #  output PSSM file handle (D = STDOUT)
+#    outPSSM     =>  $file   #  output PSSM file name (D = STDOUT)
+#    outPSSM     => \*FH     #  output PSSM file handle (D = STDOUT)
+#    pseudocount =>  $n      #  pseudocounts for profile (D = 0)
+#    pseudoCount =>  $n      #  pseudocounts for profile (D = 0)
+#    pssm_id     =>  $id     #  id of the PSSM (D = ++$i)
+#    pssm_title  =>  $title  #  title of the PSSM (D = "untitled_$i")
+#
+#  Deprecated options:
+#
 #    id         =>  $id     #  Use pssm_id instead
-#    out_pssm   =>  $file   #  output PSSM file name (D = STDOUT)
-#    out_pssm   => \*FH     #  output PSSM file handle (D = STDOUT)
-#    outPSSM    =>  $file   #  output PSSM file name (D = STDOUT)
-#    outPSSM    => \*FH     #  output PSSM file handle (D = STDOUT)
-#    pssm_id    =>  $id     #  id of the PSSM (D = $i)
-#    pssm_title =>  $title  #  title of the PSSM (D = "untitled_$i")
 #    title      =>  $title  #  Use pssm_title instead
 #
 #  alignment_to_pssm also takes most options of psiblast_in_msa (see below)
@@ -1078,7 +1482,10 @@ sub alignment_to_pssm
 
     #  Build the proper input MSA:
 
-    my ( $alignF, $opts2, $rm_alignF ) = psiblast_in_msa( $align, $opts );
+    my ( $alignF, $opts2 ) = psiblast_in_msa( $align, $opts );
+    $alignF
+        or print STDERR "BlastInterface::alignment_to_pssm: No input alignment.\n"
+            and return undef;
 
     #  Write the file with a subject sequence:
 
@@ -1091,7 +1498,7 @@ sub alignment_to_pssm
     #  Reserve the file for the intermediate PSSM output:
 
     my $pssm0F;
-    ( $fh, $pssm0F ) = SeedAware::open_tmp_file( 'alignment_to_pssm', 'pssm0' );
+    ( $fh, $pssm0F ) = SeedAware::open_tmp_file( 'psiblast_in_msa', 'pssm0' );
     close( $fh );
 
     #  Find the program:
@@ -1107,13 +1514,16 @@ sub alignment_to_pssm
                  -out_pssm => $pssm0F
                );
 
-    my $msa_master_idx = $opts2->{ msa_master_idx };
+    my $msa_master_idx = $opts2->{ msa_master_idx } || $opts2->{ msaMasterIdx };
     push @args, -msa_master_idx    => $msa_master_idx  if $msa_master_idx > 1;
     push @args, -ignore_msa_master => ()               if $opts2->{ ignore_master };
 
     #  Run psiblast:
 
-    my $rc = SeedAware::system_with_redirect( $prog, @args, { stdout => '/dev/null', stderr => '/dev/null' } );
+    my $redirect = { stdout => '/dev/null',
+                     ( ! $opts->{ warnings } ? ( stderr => '/dev/null' ) : () )
+                   };
+    my $rc = SeedAware::system_with_redirect( $prog, @args, $redirect );
     if ( $rc != 0 )
     {
         my $cmd = join( ' ', $prog, @args );
@@ -1123,7 +1533,7 @@ sub alignment_to_pssm
 
     #  Delete temporary psiblast input files:
 
-    unlink $alignF if $rm_alignF;
+    unlink $alignF;
     unlink $subjectF;
 
     #  Edit the PSSM file to integrate an id and title:
@@ -1177,31 +1587,267 @@ sub alignment_to_pssm
 
     #  Delete the initial PSSM file:
 
+    # print STDERR "profile 0 = $pssm0F\n";
     unlink $pssm0F;
 
-    #  Success to to file is filename; success to STDOUT is 1
+    #  Success to file is filename; success to STDOUT is 1
 
     $close ? $pssmF : 1;
+}
+
+
+#===============================================================================
+#  Clean (purify) a multiple sequence alignment for use as a profile. The output
+#  alignment will satisfy the following:
+#
+#      1. Alignment start will be covered by a specified fraction of the sequences (D >= 0.25)
+#      2. Sequences will differ from one-another by a specified amount; D <= 0.85 identity,
+#             but fraction positives or normalized bit score can also be specified
+#      3. Sequences with match the profile with a specified e-value (D <= 1e-4)
+#      4. Sequences will match the profile with a specified nbs (D <= 0.35)
+#      5. Sequences will match at least a specified fraction of the profile length (D > 0.80)
+#      6. All sequences will be upper case (learned that the hard way)
+#
+#  There is significant overlap in functionality with psiblast_in_msa(), but
+#  they are not equivalent.  purify_msa() is primarily a sanity check of the
+#  msa itself, while psiblast_in_msa() is primarily for handling the complex
+#  interactions between the -in_msa option and other psiblast command parameters.
+#
+#  If maintaining a particular sequence in the output is important, place it
+#  first in the alignment, and use keep_first => 1.
+#
+#     @align = purify_msa( \@align, \%options )
+#    \@align = purify_msa( \@align, \%options )
+#
+#  Options:
+#
+#     keep_case     =>  bool   # keep the input case of the sequence (D = convert to uc)          
+#     keep_first    =>  bool   # keep the first sequence (unless it fails to match profile)          
+#     max_e_value   =>  float  # maximum e-value for sequence retention in profile (D = 1e-4)
+#     max_identity  =>  float  # maximum identity of sequences retained in profile (D = 0.85)
+#     max_nbs       =>  float  # maximum normalize bit score of sequences retained in profile
+#     max_pos       =>  float  # maximum fraction positive scoring positions of sequences retained in profile
+#     max_positives =>  float  # maximum fraction positive scoring positions of sequences retained in profile
+#     min_depth     =>  float  # trim alignment start and end present in less than this fraction of sequences (D = 0.25)
+#     min_nbs       =>  float  # minimum normalized bit score to retain sequence in profile (D = 0.25)
+#     min_q_cover   =>  float  # minimum fraction of profile length that must be covered by sequence
+#     min_s_cover   =>  float  # minimum fraction of a sequence that must match profile
+#     no_pack       =>  bool   # do not pack the output alignment
+#     no_reorder    =>  bool   # do not reorder sequences before dereplication
+#     num_threads   =>  int    # psi-blast threads
+#     verbose       =>  bool   # verbose reporting to STDERR
+#
+#  Returned data in options hash, if the option true in the input hash:
+#
+#     filtered_seq  => \@filtered_seq   # copy the filtered (but not trimmed) input sequences
+#     report        => \@report         # a report on each sequence
+#
+#  Records in the report are ($kept is a statement that the sequence matched
+#  the profile; it might still be removed from the output alignment as a
+#  redundant sequence.
+#
+#     [ $sid, $status, $e_value, $score, $nbs, $q_coverage, $s_coverage ]
+#
+#  The values of status are: in_profile, redundant, poor_match
+#
+#  The removal of similar sequences is performed twice, once when the initial
+#  profile is built, and again, after poorly matching sequences are removed.
+#
+#  Input msa notes - 2017-01-15
+#
+#    The psiblast -in_msa option does not work as expected with lower case
+#    protein sequences.  The input alignment must be upper case amino acids!
+#    So, we now fix that here.
+#
+#===============================================================================
+
+if ( 0 )
+{
+    my $junk = <<'End_of_purify_msa_test_code';
+
+cd /Users/gary/Desktop/FIG/trees/nr_by_size_3
+set in=core_seed_nr_0079/clust_00001.align.fasta
+perl < $in -e 'use BlastInterface; use Data::Dumper; use gjoseqlib; my @seq = read_fasta(); my $opt = { report=>1 }; my @out = BlastInterface::purify_msa( \@seq, $opt ); print Dumper( $opt->{report} )'
+
+End_of_purify_msa_test_code
+}
+
+sub purify_msa
+{
+    my ( $align, $opts ) = @_;
+    ref( $align ) eq 'ARRAY' or return undef;
+    $opts ||= {};
+
+    my $keep_first  = $opts->{ keep_first    };
+    my $max_e_value = $opts->{ max_e_value   } || 1e-4;
+    my $max_ident   = $opts->{ max_identity  };
+    my $max_nbs     = $opts->{ max_nbs       };
+    my $max_posit   = $opts->{ max_positives } || $opts->{ max_pos };
+    my $min_depth   = $opts->{ min_depth     };
+    my $min_nbs     = $opts->{ min_nbs       } || 0.25;
+    my $min_q_cover = $opts->{ min_q_cover   };
+    my $min_s_cover = $opts->{ min_s_cover   };
+    my $no_pack     = $opts->{ no_pack       };
+    my $no_reorder  = $opts->{ no_reorder    };
+
+    #  Set these defaults only if undefined (so that user can set value to 0):
+
+    $min_depth   = 0.25  if ! defined $min_depth;
+    $min_q_cover = 0.80  if ! defined $min_q_cover;
+    $min_s_cover = 0.80  if ! defined $min_s_cover;
+
+    #  Set maximum identity if the user has not supplied any other measure:
+
+    $max_ident = 0.85  unless $max_ident || $max_nbs || $max_posit;
+    
+    #  Make a copy of the ungapped sequences for the blast database:
+
+    my @seq = map { [ @$_ ] } @$align;
+    foreach ( @seq ) { $_->[2] =~ s/-+//g }
+
+    my @in_msa = @$align;
+
+    #  Trim the start and end
+
+    @in_msa = gjoalignment::simple_trim( \@in_msa, $min_depth )  if $min_depth;
+
+    #  Remove overly similar sequences
+
+    my $derepl_opts = { no_pack => 1 };
+    $derepl_opts->{ keep_first } = 1  if $keep_first;
+    $derepl_opts->{ no_reorder } = 1  if $no_reorder;
+
+    @in_msa = gjoalignment::dereplicate_aa_align( \@in_msa, $max_ident, 'identity',  $derepl_opts )  if $max_ident;
+    @in_msa = gjoalignment::dereplicate_aa_align( \@in_msa, $max_posit, 'positives', $derepl_opts )  if $max_posit;
+    @in_msa = gjoalignment::dereplicate_aa_align( \@in_msa, $max_nbs,   'nbs',       $derepl_opts )  if $max_nbs;
+
+    @in_msa = gjoseqlib::pack_alignment( @in_msa );
+
+    #  2017-01-15:  Lower case amino acid alignments are a disaster as -in_msa
+
+    foreach ( @in_msa ) { $_->[2] = uc $_->[2] }
+
+    my %blast_opt = ( in_msa         => \@in_msa,
+                      evalue         => 10,
+                      max_hsp        =>  2*@seq,
+                      msa_master_idx =>  1,
+                      num_threads    =>  $opts->{ num_threads } || 4,
+                      out_form       => 'hsp'
+                    );
+
+    #  Blast, keeping only best match of each database sequence.
+
+    my %seen;
+    my %matches = map  { $_->[3] => $_ }
+                  grep { ! $seen{ $_->[3] }++ }
+                  BlastInterface::psiblast( undef, \@seq, \%blast_opt );
+
+    #  [ qid qdef qlen sid sdef slen scr e_val p_n p_val n_mat n_id n_pos n_gap dir q1 q2 qaln s1 s2 saln ]
+    #     0   1    2    3   4    5    6    7    8    9    10    11   12    13   14  15 16  17  18 19  20
+
+    my @report;
+    $opts->{ report } = \@report  if $opts->{ report };
+
+    #  Look at all sequences, not just those matching the profile
+
+    my %keep;
+    my %statusR;
+    foreach ( @seq )
+    {
+        my $sid  = $_->[0];
+        my $hsp  = $matches{ $sid };
+        my $eval = $hsp ? $hsp->[7]                                     : 20;
+        my $scr  = $hsp ? $hsp->[6]                                     :  0;
+        my $nbs  = $hsp ? $hsp->[6] / ( ( $hsp->[19]-$hsp->[18] ) + 1 ) :  0;
+        my $qcov = $hsp ? ( ( $hsp->[16]-$hsp->[15] ) + 1 ) / $hsp->[2] :  0;
+        my $scov = $hsp ? ( ( $hsp->[19]-$hsp->[18] ) + 1 ) / $hsp->[5] :  0;
+        my $keep = $eval <= $max_e_value
+                && $nbs  >= $min_nbs
+                && $qcov >= $min_q_cover
+                && $scov >= $min_s_cover;
+        $keep{ $sid } = $keep;
+
+        if ( $opts->{ report } )
+        {
+            #  Values of status: in_profile, redundant, poor_match
+            #  The status value 'in_profile' will be fixed at the very end.
+
+            my $status = $keep ? 'redundant' : 'poor_match';
+            push @report, [ $sid, $status, $eval, $scr, $nbs, $qcov, $scov ];
+            $statusR{ $sid } = \$report[-1]->[1];
+        }
+    }
+
+    #  These are all of the sequences than pass the sanity test;
+    #  they are not dereplicated
+
+    if ( $opts->{ filtered_seq } )
+    {
+        $opts->{ filtered_seq } = [ grep { $keep{ $_->[0] } } @seq ];
+    }
+
+    #  Extract the surviving sequences from the original alignment:
+
+    my @profile = grep { $keep{ $_->[0] } } @$align;
+
+    #  Remove overly similar sequences
+
+    @profile = gjoalignment::dereplicate_aa_align( \@profile, $max_ident, 'identity',  $derepl_opts )  if $max_ident;
+    @profile = gjoalignment::dereplicate_aa_align( \@profile, $max_posit, 'positives', $derepl_opts )  if $max_posit;
+    @profile = gjoalignment::dereplicate_aa_align( \@profile, $max_nbs,   'nbs',       $derepl_opts )  if $max_nbs;
+
+    #  Trim the start and end
+
+    @profile = gjoalignment::simple_trim( \@profile, $min_depth )  if $min_depth;
+
+    #  Pack the final alignment, unless requested otherwise
+
+    @profile = gjoseqlib::pack_alignment( @profile )  unless $no_pack;
+
+    #  Convert to upper case, unless requested otherwise
+
+    if ( ! $opts->{ keep_case } )
+    {
+        foreach ( @profile ) { $_->[2] = uc $_->[2] }
+    }
+
+    #  Fix the status of sequences that survived dereplication:
+
+    if ( $opts->{ report } )
+    {
+        foreach ( @profile ) { ${ $statusR{$_->[0]} } = 'in_profile' }
+    }
+
+    wantarray ? @profile : \@profile;
 }
 
 
 #-------------------------------------------------------------------------------
 #  Fix a multiple sequence alignment to be appropriate for a psiblast
 #  -in_msa file.  This is often necessary due to arbitrary limitations on
-#  the acceptable sequence ordering and program options.  We recommend this
-#  for routine sanity checking.
+#  the acceptable sequence ordering and program options.
 #
-#      ( $msa_name, \%opts, $rm_msa ) = psiblast_in_msa(  $align_file, \%opts )
-#      ( $msa_name, \%opts, $rm_msa ) = psiblast_in_msa( \@alignment,  \%opts )
-#      ( $msa_name, \%opts, $rm_msa ) = psiblast_in_msa( \*ALIGN_FH,   \%opts )
+#  We highly recommend this function for routine sanity checking.
 #
-#  The scalar context form below should generally not be used because the output
-#  options hash supplied in list context many include important modifications
-#  to those supplied by the user.
+#      (  $msa_path, \%opts ) = psiblast_in_msa(  $align_file, \%opts )
+#      (  $msa_path, \%opts ) = psiblast_in_msa( \@alignment,  \%opts )
+#      (  $msa_path, \%opts ) = psiblast_in_msa( \*ALIGN_FH,   \%opts )
 #
-#        $msa_name                    = psiblast_in_msa(  $align_file, \%opts )
-#        $msa_name                    = psiblast_in_msa( \@alignment,  \%opts )
-#        $msa_name                    = psiblast_in_msa( \*ALIGN_FH,   \%opts )
+#      ( \@msa,      \%opts ) = psiblast_in_msa(  $align_file, \%opts )
+#      ( \@msa,      \%opts ) = psiblast_in_msa( \@alignment,  \%opts )
+#      ( \@msa,      \%opts ) = psiblast_in_msa( \*ALIGN_FH,   \%opts )
+#
+#        $msa_path      # output file path
+#       \@msa           # output alignment (with as_align => 1 option)
+#       \%opts          # options as modified for input to psiblast()
+#
+#  The scalar context form below should generally not be used because the
+#  output options hash supplied in list context many include important
+#  modifications to those supplied by the user.
+#
+#        $msa_path           = psiblast_in_msa(  $align_file, \%opts )
+#        $msa_path           = psiblast_in_msa( \@alignment,  \%opts )
+#        $msa_path           = psiblast_in_msa( \*ALIGN_FH,   \%opts )
 #
 #  The first argument supplies the MSA to be fixed. It can be a list of
 #  sequence triples, a file name, or an open file handle. Note that the
@@ -1211,28 +1857,26 @@ sub alignment_to_pssm
 #
 #  General options:
 #
-#    file    => $path           #  path to file to be created (same as msa)
-#    in_msa  => $alignment      #  bad alternative to supplying the alignment parameter
-#    inMSA   => $alignment      #  bad alternative to supplying the alignment parameter
-#    msa     => $path           #  path to file to be created; this should not
-#                               #     be the same as $align_file.
-#    tmp_dir => $dir            #  directory for output file
+#    as_align => $bool           #  return the alignment per se, not a file path
+#    file     => $path           #  requested path to output file (same as msa)
+#    msa      => $path           #  requested path to output file; this should not
+#                                #     be the same as $align_file.
+#    tmp_dir  => $dir            #  directory for output file
 #
 #  Sequence filtering options:
 #
-#    keep    => \@ids           #  ids of sequences to keep in the MSA, regardless
-#                               #      of similarity filtering.
-#    max_sim =>  $fract         #  maximum identity of sequences in profile; i.e., build
-#                               #      the PSSM from a representative set (D = no_limit).
-#                               #      This can take a significant amount of time.
-#    min_sim =>  $min_sim_spec  #  exclude sequences with less than the specified identity
-#                               #      to all specified sequences (D = no_limit).
+#    keep     => \@ids           #  ids of sequences to keep in the MSA, regardless
+#                                #      of similarity filtering.
+#    max_sim  =>  $fract         #  maximum identity of sequences in profile; i.e., build
+#                                #      the PSSM from a representative set (D = no_limit).
+#                                #      This can take a significant amount of time.
+#    min_sim  =>  $min_sim_spec  #  exclude sequences with less than the specified identity
+#                                #      to all specified sequences (D = no_limit).
 #
-#  The minimum similarity specification is one of:
+#    A minimum similarity specification is one of:
 #
 #    $min_sim_spec = [ $min_ident,  @ref_ids ]
 #    $min_sim_spec = [ $min_ident, \@ref_ids ]
-#
 #
 #  Master sequence options:
 #
@@ -1242,6 +1886,11 @@ sub alignment_to_pssm
 #    msa_master_idx    => $int    #  1-based index of the sequence to use as a master (D = 1)
 #    pseudo_master     => $bool   #  add a master sequence covering all columns in the MSA (D = 0)
 #    pseudoMaster      => $bool   #  add a master sequence covering all columns in the MSA (D = 0)
+#
+#  Deprecated options:
+#
+#    in_msa   => $alignment      #  the input alignment (deprecated, use the function arg)
+#    inMSA    => $alignment      #  the input alignment (deprecated, use the function arg)
 #
 #  Master sequence notes:
 #
@@ -1260,6 +1909,12 @@ sub alignment_to_pssm
 #    PSSM, and hence does not influence the alignment or e-value. Any user-
 #    supplied msa_master_id or msa_master_idx option value will be ignored.
 #
+#  Input msa notes - 2017-01-15
+#
+#    The psiblast -in_msa option does not work as expected with lower case
+#    protein sequences.  The input alignment must be upper case amino acids!
+#    So, we will fix that here.  We will always write the file.
+#
 #-------------------------------------------------------------------------------
 sub psiblast_in_msa
 {
@@ -1268,15 +1923,15 @@ sub psiblast_in_msa
     $align ||= $opts->{ in_msa } || $opts->{ inMSA };
 
     my $ignore_master  = $opts->{ ignore_msa_master } || $opts->{ ignoreMaster };
-    my $pseudo_master  = $opts->{ pseudo_master }     || $opts->{ pseudoMaster };
-    my $msa_master_id  = $opts->{ msa_master_id };
-    my $msa_master_idx = $opts->{ msa_master_idx }    || 0;
+    my $pseudo_master  = $opts->{ pseudo_master     } || $opts->{ pseudoMaster };
+    my $msa_master_id  = $opts->{ msa_master_id     } || $opts->{ msaMasterId  };
+    my $msa_master_idx = $opts->{ msa_master_idx    } || $opts->{ msaMasterIdx } || 0;
     my $max_sim        = $opts->{ max_sim };
     my $min_opt        = $opts->{ min_sim };
 
-    my $alignF         = $opts->{ file } || $opts->{ msa };
-    my $write_file     = $alignF ? 1 : 0;   #  Do we need to write a file?
-    my $keep_file      = $write_file;       #  Keep the file if named
+    my $alignF         = $opts->{ file }              || $opts->{ msa };
+
+    #  Options that are consumed by this function, not passed through to psiblast
 
     my %strip = map { $_ => 1 } qw( file
                                     ignore_msa_master  ignoreMaster
@@ -1285,12 +1940,14 @@ sub psiblast_in_msa
                                     max_sim
                                     min_sim
                                     msa
-                                    msa_master_id
-                                    msa_master_idx
+                                    msa_master_id      msaMasterId
+                                    msa_master_idx     msaMasterIdx
                                     pseudo_master      pseudoMaster
                                   );
 
-    my $opts2 = { map { ! $strip{$_} ? ( $_ => $opts->{$_} ) : () } keys %$opts };
+    my $opts2 = { map { ! $strip{$_} ? ( $_ => $opts->{$_} ) : () }
+                  keys %$opts
+                };
 
     my ( $min_sim, @ref_ids );
     if ( $min_opt && ( ref($min_opt) eq 'ARRAY' ) && @$min_opt > 1 )
@@ -1299,202 +1956,183 @@ sub psiblast_in_msa
         @ref_ids = @{$ref_ids[0]} if ( ( @ref_ids == 1 ) && ( ref( $ref_ids[0] ) eq 'ARRAY' ) )
     }
 
-    my $is_file  = $align && ! ref( $align ) && -s $align;
     my $is_array = gjoseqlib::is_array_of_sequence_triples( $align );
+    my $is_file  = $align && ! ref( $align ) && -s $align;
     my $is_glob  = $align && ref( $align ) eq 'GLOB';
+
     if ( ! ( $is_file || $is_array || $is_glob ) )
     {
         warn "BlastInterface::psiblast_in_msa: Unsupported data-type for alignment";
-        return undef;
+        return ();
     }
 
-    #  Is there anything that might require writing a file?
+    #  As of 01-15-2017, we always (re)write the msa file
 
-    if ( $is_array || $is_glob
-                   || $write_file
-                   || $msa_master_id
-                   || $max_sim
-                   || $min_sim
-                   || $pseudo_master
-                   || ( $msa_master_idx > 1 && $ignore_master )
-       )
+    my @align;
+    if ( $is_array )
     {
-        my @align;
-
-        if ( $is_array )
-        {
-            @align = @$align;
-            $write_file = 1;
-        }
-        elsif ( $is_glob )
-        {
-            @align = gjoseqlib::read_fasta( $align );
-            $write_file = 1;
-        }
-        elsif ( $is_file )
-        {
-            @align  = gjoseqlib::read_fasta( $align );
-            $alignF = $align;
-        }
-
-        @align
-            or warn "BlastInterface::psiblast_in_msa: No alignment supplied."
-                and return undef;
-
-        #  A one-based index of the ids:
-
-        my %ids;
-        my $i;
-        for ( $i = 0; $i < @align; $i++ )
-        {
-            my $id = $align[$i]->[0];
-            if ( $ids{ $id } )
-            {
-                warn "BlastInterface::psiblast_in_msa: Duplicate input id '$id'.";
-            }
-            else
-            {
-                $ids{ $id } = $i + 1;
-            }
-        }
-
-        #  Sanity check any requested master index number, and convert to the id.
-
-        if ( $msa_master_idx )
-        {
-            abs( $msa_master_idx ) <= @align
-                or warn "BlastInterface::psiblast_in_msa: Invalid value of msa_master_idx ($msa_master_idx) for $i sequence alignment."
-                    and return undef;
-            $msa_master_idx = @align + $msa_master_idx + 1 if $msa_master_idx < 0;
-            $msa_master_id ||= $align[ $msa_master_idx - 1 ]->[0];
-
-            #  The id won't change, but the index might, so we invalidate it
-            $msa_master_idx = undef;
-        }
-
-        #  If there is a master sequence, we need to keep it through any processing:
-
-        my @keep = ();
-        if ( $msa_master_id )
-        {
-            $ids{ $msa_master_id }
-                or warn "BlastInterface::psiblast_in_msa: msa_master_id ($msa_master_id) not in the sequence alignment."
-                    and return undef;
-            push @keep, $msa_master_id if $msa_master_id;
-        }
-
-        #  Any other sequences that are specifically kept:
-
-        my $keep = $opts->{ keep };
-        if ( $keep )
-        {
-            push @keep, ( ref( $keep ) eq 'ARRAY' ? @$keep : $keep );
-        }
-
-        #  Carry out any requested filtering:
-
-        my $n_seq = @align;
-        if ( $max_sim )
-        {
-            my %rep_opts = ( max_sim => $max_sim );
-
-            $rep_opts{ keep }    = \@keep    if @keep;
-            $rep_opts{ min_sim } =  $min_sim if $min_sim;
-
-            @align = gjoalignment::representative_alignment( \@align, \%rep_opts );
-        }
-        elsif ( $min_sim )
-        {
-            my %keep = map { $_ => 1 } @keep;
-            foreach ( gjoalignment::filter_by_similarity( \@align, $min_sim, @ref_ids ) )
-            {
-                $keep{ $_->[0] } = 1;
-            }
-            @align = grep { $keep{ $_->[0] } } @align;
-            @align = gjoseqlib::pack_alignment( \@align ) if @align < $n_seq;
-        }
-
-        #  If the number of sequences changed, we must write a file:
-
-        $write_file ||= ( @align < $n_seq );
-
-        #  Add a pseudomaster, if requested:
-
-        if ( $pseudo_master )
-        {
-            my $master = gjoalignment::consensus_sequence( \@align );
-            unshift @align, [ 'consensus', '', $master ];
-            $write_file     = 1;
-            $msa_master_id  = 'consensus';
-            $msa_master_idx = 1;
-            $ignore_master  = 1;
-        }
-
-        if ( $msa_master_id && ! $msa_master_idx )
-        {
-            for ( my $i = 0; $i < @align; $i++ )
-            {
-                next unless $msa_master_id eq $align[$i]->[0];
-                $msa_master_idx = $i + 1;
-                last;
-            }
-
-            #  This should have been caught earlier, so this is a severe issue.
-            $msa_master_idx
-                or die "BlastInterface::psiblast_in_msa: msa_master_id '$msa_master_id' lost from alignment.";
-        }
-
-        #  In psiblast 2.2.29+ command flags -ignore_master and
-        #  -msa_master_idx are imcompatible, so we move the master
-        #  sequence to be sequence 1 (the default master sequence).
-
-        if ( $ignore_master && $msa_master_idx > 1 )
-        {
-            my $master = splice( @align, $msa_master_idx-1, 1 );
-            unshift @align, $master;
-            $msa_master_idx = 1;
-            $write_file     = 1;
-        }
-
-        if ( $write_file )
-        {
-            my $fh;
-            if ( $alignF )
-            {
-                open( $fh, '>', $alignF );
-            }
-            else
-            {
-                my @dir = $opts->{ tmp_dir } ? ( $opts->{ tmp_dir } ) : ();
-                ( $fh, $alignF ) = SeedAware::open_tmp_file( 'psiblast_in_msa', 'fasta', @dir );
-            }
-
-            if ( $fh )
-            {
-                gjoseqlib::write_fasta( $fh, \@align );
-                close( $fh );
-            }
-            else
-            {
-                $alignF ||= 'unnamed_tmp_file';
-                warn "BlastInterface::psiblast_in_msa: failed to open '$alignF' for writing MSA file.";
-                return ();
-            }
-        }
-
-        $alignF                     ||= $align;
-        $opts2->{ ignore_msa_master } = 1                if $ignore_master;
-        $opts2->{ msa_master_idx }    = $msa_master_idx  if $msa_master_idx > 1;
+        #  Rewrite the entries so that the original alignment is not modified
+        @align = map { [ @$_[0,1], uc $_->[2] ] }
+                 @$align;
+    }
+    elsif ( $is_glob || $is_file )
+    {
+        #  Read the file or file handle and then fix the sequences
+        @align = gjoseqlib::read_fasta( $align );
+        foreach ( @align ) { $_->[2] = uc $_->[2] }
     }
 
+    @align
+        or warn "BlastInterface::psiblast_in_msa: No alignment supplied."
+            and return undef;
+
+    #  A one-based index of the ids:
+
+    my %ids;
+    my $i;
+    for ( $i = 0; $i < @align; $i++ )
+    {
+        my $id = $align[$i]->[0];
+        if ( $ids{ $id } )
+        {
+            warn "BlastInterface::psiblast_in_msa: Duplicate input id '$id'.";
+        }
+        else
+        {
+            $ids{ $id } = $i + 1;
+        }
+    }
+
+    #  Sanity check any requested master index number, and convert to the id.
+
+    if ( $msa_master_idx )
+    {
+        abs( $msa_master_idx ) <= @align
+            or warn "BlastInterface::psiblast_in_msa: Invalid value of msa_master_idx ($msa_master_idx) for $i sequence alignment."
+                and return ();
+        $msa_master_idx = @align + $msa_master_idx + 1 if $msa_master_idx < 0;
+        $msa_master_id ||= $align[ $msa_master_idx - 1 ]->[0];
+
+        #  The id won't change, but the index might, so we invalidate it
+        $msa_master_idx = undef;
+    }
+
+    #  If there is a master sequence, we need to keep it through any processing:
+
+    my @keep = ();
+    if ( $msa_master_id )
+    {
+        $ids{ $msa_master_id }
+            or warn "BlastInterface::psiblast_in_msa: msa_master_id ($msa_master_id) not in the sequence alignment."
+                and return ();
+        push @keep, $msa_master_id if $msa_master_id;
+    }
+
+    #  Any other sequences that are specifically kept:
+
+    my $keep = $opts->{ keep };
+    if ( $keep )
+    {
+        push @keep, ( ref( $keep ) eq 'ARRAY' ? @$keep : $keep );
+    }
+
+    #  Carry out any requested filtering:
+
+    my $n_seq = @align;
+    if ( $max_sim )
+    {
+        my %rep_opts = ( max_sim => $max_sim );
+
+        $rep_opts{ keep    } = \@keep    if @keep;
+        $rep_opts{ min_sim } =  $min_sim if $min_sim;
+
+        @align = gjoalignment::representative_alignment( \@align, \%rep_opts );
+    }
+    elsif ( $min_sim )
+    {
+        my %keep = map { $_ => 1 } @keep;
+        foreach ( gjoalignment::filter_by_similarity( \@align, $min_sim, @ref_ids ) )
+        {
+            $keep{ $_->[0] } = 1;
+        }
+        @align = grep { $keep{ $_->[0] } } @align;
+        @align = gjoseqlib::pack_alignment( \@align ) if @align < $n_seq;
+    }
+
+    #  Add a pseudomaster, if requested:
+
+    if ( $pseudo_master )
+    {
+        my $master = gjoalignment::consensus_sequence( \@align );
+        unshift @align, [ 'consensus', '', $master ];
+        $msa_master_id  = 'consensus';
+        $msa_master_idx = 1;
+        $ignore_master  = 1;
+    }
+
+    if ( $msa_master_id && ! $msa_master_idx )
+    {
+        for ( my $i = 0; $i < @align; $i++ )
+        {
+            next unless $msa_master_id eq $align[$i]->[0];
+            $msa_master_idx = $i + 1;
+            last;
+        }
+
+        #  This should have been caught earlier, so this is a severe issue.
+        $msa_master_idx
+            or die "BlastInterface::psiblast_in_msa: msa_master_id '$msa_master_id' lost from alignment.";
+    }
+
+    #  In psiblast 2.2.29+ command flags -ignore_master and
+    #  -msa_master_idx are imcompatible, so we move the master
+    #  sequence to be sequence 1 (the default master sequence).
+
+    if ( $ignore_master && $msa_master_idx > 1 )
+    {
+        my $master = splice( @align, $msa_master_idx-1, 1 );
+        unshift @align, $master;
+        $msa_master_idx = 1;
+    }
+
+    my $aln;
+    if ( $opts->{ as_align } )
+    {
+        $aln = \@align;
+    }
     else
     {
-        $alignF = $align;
+        my $fh;
+        if ( $alignF )
+        {
+            open( $fh, '>', $alignF );
+        }
+        else
+        {
+            my @dir = $opts->{ tmp_dir } ? ( $opts->{ tmp_dir } ) : ();
+            ( $fh, $alignF ) = SeedAware::open_tmp_file( 'psiblast_in_msa', 'fasta', @dir );
+        }
+    
+        if ( $fh )
+        {
+            gjoseqlib::write_fasta( $fh, \@align );
+            close( $fh );
+        }
+        else
+        {
+            $alignF = $alignF ? "'$alignF'" : 'a temporary file';
+            warn "BlastInterface::psiblast_in_msa: failed to open $alignF for writing MSA file.";
+            return ();
+        }
+
+        $aln               = $alignF;
+        $opts2->{ in_msa } = $alignF;
     }
 
-    $opts2->{ in_msa } = $alignF;
+    $opts2->{ ignore_msa_master } = 1                if $ignore_master;
+    $opts2->{ msa_master_idx    } = $msa_master_idx  if $msa_master_idx > 1;
 
-    wantarray ? ( $alignF, $opts2, $write_file && ! $keep_file ) : $alignF;
+    wantarray ? ( $aln, $opts2 ) : $aln;
 }
 
 
@@ -1606,7 +2244,7 @@ sub psi_tblastn
 
     @hsps = sort { $a->[3] cmp $b->[3] || $b->[6] <=> $a->[6] } @hsps;
 
-    if ( $opts->{ outForm } ne 'hsp' )
+    if ( ( $opts->{ outForm } || $opts->{ out_form } || '' ) ne 'hsp' )
     {
         @hsps = map { format_hsp( $_, 'psi_tblastn', $opts ) } @hsps;
     }
@@ -1622,7 +2260,7 @@ sub psi_tblastn
 #     adjust_hsp( $hsp, $frame, $begin )
 #
 #   6   7    8    9    10  11   12   13  14 15 16  17  18 19  20
-#  scr Eval nseg Eval naln nid npos ngap fr q1 q2 qseq s1 s2 sseq
+#  scr Eval nseg Eval naln nid npos ngap fr q1 q2 qaln s1 s2 saln
 #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 sub adjust_hsp
 {
@@ -1711,7 +2349,7 @@ sub is_stdin
 #
 #      tmp_dir => $dir   #  Location for temporary files
 #
-#  A filename template is recognized by ending with at leat 4 X characters,
+#  A filename template is recognized by ending with at least 4 X characters,
 #  as in 'query_XXXX'.  A temporary file will be crated, and deleted at the
 #  end of the process.
 #  A filename does not end with 'XXXX', it will be used if needed, and not
@@ -1792,7 +2430,7 @@ sub valid_fasta
 
             if ( $fh )
             {
-                gjoseqlib::write_fasta( $out_file, $data );
+                gjoseqlib::write_fasta( $fh, @$data );
                 close( $fh );
             }
             else
@@ -1882,11 +2520,13 @@ sub check_db
 #
 #  Options:
 #
-#      db_dir   => $dir     #  Directory for database, but name is temp
-#      db_path  => $path    #  Name (path) for the database; not temporary
-#      db_title => $title   #  Title of the database
-#      title    => $title   #  Use db_title instead
-#      tmp_dir  => $db_dir  #  Temporary directory for the database
+#      db_dir       => $dir     #  Directory for database, but name is temp
+#      db_path      => $path    #  Name (path) for the database; not temporary
+#      db_title     => $title   #  Title of the database
+#      parse_seqids => $bool    #  Set the makeblastdb -parse_seqids flag
+#      parseSeqIds  => $bool    #  Set the makeblastdb -parse_seqids flag
+#      title        => $title   #  Use db_title instead
+#      tmp_dir      => $db_dir  #  Temporary directory for the database
 #
 #  If $db is a readable file, but is in a directory that is not writable, we
 #  put the database somewhere else.
@@ -1918,7 +2558,7 @@ sub verify_db
     #  We need to format the database. Figure out if the db directory is
     #  writable, otherwise make a copy in a temporary location:
 
-    my ( $db_path, $db_dir );
+    my $db_path;
 
     if ( ( $db_path = $opts->{ db_path } )
       && ( $db_dir  = dir_of( $db_path ) )
@@ -1935,6 +2575,7 @@ sub verify_db
         $db_dir  = dir_of( $db_path );
     }
 
+    my $out_db;
     if ( ! -w $db_dir )
     {
         $db_dir ||= $opts->{ tmp_dir };
@@ -1956,19 +2597,7 @@ sub verify_db
             return '';
         }
 
-        my $newdb = "$db_dir/db";
-        if ( system( 'cp', $db, $newdb ) )  # I would prefer /bin/cp, but ...
-        {
-            warn "BlastInterface::verify_db: failed to copy database file to a new location.\n";
-            return '';
-        }
-
-        #  This is just an informative message. If permissions are set correctly, it
-        #  should never occur, but ....
-
-        warn "BlastInterface::verify_db: Database '$db' copied to '$newdb'.\n";
-
-        $db = $newdb;
+        $out_db = "$db_dir/db";
     }
 
     my ( $prog, @args );
@@ -1980,7 +2609,9 @@ sub verify_db
                   -dbtype  => $type,
                   -title   => $title,
                   -logfile => '/dev/null'
-                )
+                );
+        push @args, ( -out => $out_db )  if $out_db;
+        push @args,  '-parse_seqids'     if $opts->{ parse_seqids } || $opts->{ parseSeqIds };
     }
     elsif ( $prog = SeedAware::executable_for( 'formatdb' ) )
     {
@@ -1991,6 +2622,7 @@ sub verify_db
                   -i => $db,
                   -t => $title
                 );
+        push @args, ( -o => $out_db )  if $out_db;
     }
     else
     {
@@ -2008,7 +2640,7 @@ sub verify_db
         return '';
     }
 
-    $db;
+    $out_db || $db;
 }
 
 
@@ -2018,6 +2650,57 @@ sub dir_of
     return eval { require File::Basename; } ? File::Basename::dirname( $_ )
          : ( m#^(.*[/\\])[^/\\]+$# )        ? $1
          :                                    '.';
+}
+
+
+#-------------------------------------------------------------------------------
+#  If a blast database is build with -parse_seqids, it is possible to extract
+#  sequence entries from the database by their id.  The blast functions in
+#  this package will build that database this way if called with the
+#  parse_seqids => 1 option.
+#
+#     @seq_entries = sequences_from_db( $db, @ids )
+#    \@seq_entries = sequences_from_db( $db, @ids )
+#
+#-------------------------------------------------------------------------------
+sub sequences_from_db
+{
+    my ( $db, @ids ) = @_;
+    $db  or return undef;
+    @ids or return wantarray ? () : [];
+
+    my %id  = map { $_ => 1 } @ids;
+
+    my $cmd = 'blastdbcmd';
+    my @seq;
+
+    #  Batch a maximum of 1000 ids per call
+
+    while ( @ids )
+    {
+        my $ids = join( ',', splice( @ids, 0, 1000 ) );
+        my @arg = ( -db    => $db,
+                    -entry => $ids
+                  );
+
+        open( DB_PIPE, '-|', $cmd, @arg )
+            or print STDERR "Failed to open read pipe from blastdbcmd.\n"
+                and return undef;
+
+        push @seq, gjoseqlib::read_fasta( \*DB_PIPE );
+        close( DB_PIPE );
+    }
+
+    #  The blast database can perpend 'lcl|' to sequence ids.  If the user
+    #  requests ids without this, we need to remove it.
+
+    foreach ( @seq )
+    {
+        my $id = $_->[0];
+        $_->[0] = $id  if ! $id{ $id } && $id =~ s/^lcl\|// && $id{ $id };
+    }
+
+    wantarray ? @seq : \@seq;
 }
 
 
@@ -2068,16 +2751,22 @@ sub run_blast
 {
     my( $queryF, $dbF, $blast_prog, $opts ) = @_;
 
-    if ( lc ( $opts->{outForm} || '' ) ne 'hsp' )
+    if ( lc ( $opts->{ outForm } || $opts->{ out_form } || '' ) ne 'hsp' )
     {
         eval { require Sim; }
             or print STDERR "Failed in require Sim. Consider using outForm => 'hsp'.\n"
                 and return wantarray ? () : [];
     }
 
-    my $cmd   = &form_blast_command( $queryF, $dbF, $blast_prog, $opts )
+    my $cmd = &form_blast_command( $queryF, $dbF, $blast_prog, $opts )
         or warn "BlastInterface::run_blast: Failed to create a blast command."
             and return wantarray ? () : [];
+
+    if ( $opts->{ maxOffset } && $blast_prog ne 'blastp' && $blast_prog ne 'blastn' )
+    {
+        delete $opts->{ maxOffset };
+        print STDERR "Warning: maxOffset option deleted for program '$blast_prog'.\n";
+    }
 
     my $redir = { $opts->{ warnings } ? () : ( stderr => "/dev/null" ) };
     my $fh    = &SeedAware::read_from_pipe_with_redirect( $cmd, $redir )
@@ -2085,10 +2774,12 @@ sub run_blast
 
     my $includeSelf = defined( $opts->{ includeSelf } ) ?   $opts->{ includeSelf }
                     : defined( $opts->{ excludeSelf } ) ? ! $opts->{ excludeSelf }
-                    :                                        $queryF ne $dbF;
+                    :                                       $queryF ne $dbF;
 
     #  With blastall, we must parse the output; with the blast+ programs
-    #  we can get the desired tabular output directly, so, hm, no alignments.
+    #  we can get tabular output directly. Hm, no alignments.
+    #  Later: We could now get tabular output, but I've not worked it into the
+    #  code.
     #
     # my $blastall = $cmd->[0] =~ /blastall$/;
 
@@ -2114,7 +2805,7 @@ sub run_blast
 #
 #  Data records from next_blast_hsp() are of the form:
 #
-#     [ qid qdef qlen sid sdef slen scr e_val p_n p_val n_mat n_id n_pos n_gap dir q1 q2 qseq s1 s2 sseq ]
+#     [ qid qdef qlen sid sdef slen scr e_val p_n p_val n_mat n_id n_pos n_gap dir q1 q2 qaln s1 s2 saln ]
 #        0   1    2    3   4    5    6    7    8    9    10    11   12    13   14  15 16  17  18 19  20
 #
 #-------------------------------------------------------------------------------
@@ -2123,13 +2814,14 @@ sub keep_hsp
     my( $hsp, $opts ) = @_;
 
     local $_;
-    return 0 if (($_ = $opts->{minIden})  && ($_ > ($hsp->[11]/$hsp->[10])));
-    return 0 if (($_ = $opts->{minPos})   && ($_ > ($hsp->[12]/$hsp->[10])));
-    return 0 if (($_ = $opts->{minScr})   && ($_ >  $hsp->[6]));
+    return 0 if (($_ = $opts->{minIden})   && ($_ > ($hsp->[11]/$hsp->[10])));
+    return 0 if (($_ = $opts->{minPos})    && ($_ > ($hsp->[12]/$hsp->[10])));
+    return 0 if (($_ = $opts->{minScr})    && ($_ >  $hsp->[6]));
     #  This could be defined with the min aligned length, not the alignment length
-    return 0 if (($_ = $opts->{minNBScr}) && ($_ >  $hsp->[6]/$hsp->[10]));
-    return 0 if (($_ = $opts->{minCovQ})  && ($_ > ((abs($hsp->[16]-$hsp->[15])+1)/$hsp->[2])));
-    return 0 if (($_ = $opts->{minCovS})  && ($_ > ((abs($hsp->[19]-$hsp->[18])+1)/$hsp->[5])));
+    return 0 if (($_ = $opts->{minNBScr})  && ($_ >  $hsp->[6]/$hsp->[10]));
+    return 0 if (($_ = $opts->{minCovQ})   && ($_ > ((abs($hsp->[16]-$hsp->[15])+1)/$hsp->[2])));
+    return 0 if (($_ = $opts->{minCovS})   && ($_ > ((abs($hsp->[19]-$hsp->[18])+1)/$hsp->[5])));
+    return 0 if (($_ = $opts->{maxOffset}) && ($_ < hsp_offset_f($hsp)));
     return 1;
 }
 
@@ -2144,7 +2836,7 @@ sub format_hsp
 {
     my( $hsp, $blast_prog, $opts ) = @_;
 
-    my $out_form = lc ( $opts->{outForm} || 'sim' );
+    my $out_form = lc ( $opts->{ outForm } || $opts->{ out_form } || 'sim' );
     $hsp->[7] =~ s/^e-/1.0e-/  if $hsp->[7];
     $hsp->[9] =~ s/^e-/1.0e-/  if $hsp->[9];
     return ($out_form eq 'hsp') ? $hsp
@@ -2218,7 +2910,8 @@ sub form_blast_command
 
     my $maxE             = $opts->{ maxE }             || $opts->{ evalue }           || 0.01;
     my $percentIdentity  = $opts->{ percIdentity }     || $opts->{ perc_identity }    || 0;
-    my $maxHSP           = $opts->{ maxHSP }           || $opts->{ numAlignments }    || $opts->{ num_alignments };
+    my $maxHSP           = $opts->{ maxHSP }           || $opts->{ max_hsp }
+                        || $opts->{ numAlignments }    || $opts->{ num_alignments };
     my $dbLen            = $opts->{ dbLen }            || $opts->{ dbSize }           || $opts->{ dbsize };
     my $searchSp         = $opts->{ searchSp }         || $opts->{ searchsp };
     my $bestHitOverhang  = $opts->{ bestHitOverhang }  || $opts->{ best_hit_overhang };
@@ -2247,8 +2940,8 @@ sub form_blast_command
     my $outPSSM          = $opts->{ outPSSM }          || $opts->{ out_pssm };
     my $asciiPSSM        = $opts->{ asciiPSSM }        || $opts->{ out_ascii_pssm };
     my $inMSA            = $opts->{ inMSA }            || $opts->{ in_msa };
-    my $queryIndex       = $opts->{ queryIndex }       || $opts->{ msa_master_idx };
-    my $queryID          = $opts->{ queryID }          || $opts->{ msa_master_id };
+    my $queryIndex       = $opts->{ queryIndex }       || $opts->{ msa_master_idx } || $opts->{ msaMasterIdx };
+    my $queryID          = $opts->{ queryID }          || $opts->{ msa_master_id }  || $opts->{ msaMasterId };
     my $ignoreMaster     = flag_value( $opts, qw( ignoreMaster ignore_msa_master ) );
     my $inPSSM           = $opts->{ inPSSM }           || $opts->{ in_pssm };
     my $pseudoCount      = $opts->{ pseudoCount }      || $opts->{ pseudocount };
@@ -2336,14 +3029,13 @@ sub form_blast_command
         }
 
         push @cmd, $blastplus;
-        push @cmd, -task                => 'blastn'           if $blast_prog eq 'blastn';
         push @cmd, -num_threads         => $threads           if $threads;
 
         push @cmd, -db                  => $dbF;
         push @cmd, -db_gen_code         => $dbCode            if $dbCode;
         push @cmd, -gilist              => $giList            if $giList;
 
-        push @cmd, -query               => $queryF            if $blast_prog ne 'psiblast';
+        push @cmd, -query               => $queryF            if $queryF && $blast_prog ne 'psiblast';
         push @cmd, -query_genetic_code  => $queryCode         if $queryCode;
         push @cmd, -query_loc           => $queryLoc          if $queryLoc;
         push @cmd, -strand              => strand3($strand)   if $strand;
@@ -2653,7 +3345,7 @@ sub nt_match_seq
 
 
 #
-#  [ qid qdef qlen sid sdef slen scr e_val p_n p_val n_mat n_id n_pos n_gap dir q1 q2 qseq s1 s2 sseq ]
+#  [ qid qdef qlen sid sdef slen scr e_val p_n p_val n_mat n_id n_pos n_gap dir q1 q2 qaln s1 s2 saln ]
 #     0   1    2    3   4    5    6    7    8    9    10    11   12    13   14  15 16  17  18 19  20
 #
 sub hsps_to_text
@@ -2741,7 +3433,7 @@ sub hsps_to_text
         }
 
         my ( $scr, $e_val, $n_mat, $n_id, $n_pos, $n_gap, $dir ) = @$hsp[6,7,10..14];
-        my ( $q1, $q2, $qseq, $s1, $s2, $sseq ) = @$hsp[15..20];
+        my ( $q1, $q2, $qaln, $s1, $s2, $saln ) = @$hsp[15..20];
 
         my $e_str = $e_val >= 0.1 ? sprintf( "%.1f", $e_val )
                   : $e_val >    0 ? sprintf( "%.1e", $e_val )
@@ -2758,11 +3450,11 @@ sub hsps_to_text
                  : $tool eq 'tblastn' ? " Frame = $dir\n\n"
                  :                      "\n";
 
-        my $match = $tool eq 'blastn' ? nt_match_seq(  $qseq, $sseq )
-                                      : b62_match_seq( $qseq, $sseq );
+        my $match = $tool eq 'blastn' ? nt_match_seq(  $qaln, $saln )
+                                      : b62_match_seq( $qaln, $saln );
 
-        my @qseq  = $qseq  =~ /(.{1,$perline})/g;
-        my @sseq  = $sseq  =~ /(.{1,$perline})/g;
+        my @qaln  = $qaln  =~ /(.{1,$perline})/g;
+        my @saln  = $saln  =~ /(.{1,$perline})/g;
         my @match = $match =~ /(.{1,$perline})/g;
 
         my $ndig = int( log(max_n($q1,$q2,$s1,$s2)+0.5) / log(10) ) + 1;
@@ -2777,15 +3469,15 @@ sub hsps_to_text
         my $mfmt = "       $sp %s\n";
         my $sfmt = "Subjt: \%${ndig}d %s \%${ndig}d\n\n";
 
-        while ( @qseq )
+        while ( @qaln )
         {
-            my $qs      = shift @qseq;
+            my $qs      = shift @qaln;
             my $q_used  = $qs =~ tr/-//c;
             my $q1_next = $q1 + $q_used * $q_step * $q_dir;
 
             my $ms = shift @match;
 
-            my $ss      = shift @sseq;
+            my $ss      = shift @saln;
             my $s_used  = $ss =~ tr/-//c;
             my $s1_next = $s1 + $s_used * $s_step * $s_dir;
 
@@ -2922,6 +3614,8 @@ sub verify_dir
 sub html_esc { local $_ = shift || ''; s/\&/&amp;/g; s/>/&gt;/g; s/</&lt;/g; $_ }
 
 sub max   { $_[0] >= $_[1] ? $_[0] : $_[1] }
+
+sub min   { $_[0] <= $_[1] ? $_[0] : $_[1] }
 
 sub max_n { my $max = shift; foreach ( @_ ) { $max = $_ if $_ > $max }; $max }
 

@@ -141,6 +141,19 @@ package gjogenbank;
 #
 #     $ftr_location = location( $ftr )      #  Returns empty string on failure.
 #
+#  Feature location as cbdl = [ [ contig, beg, dir, len ], ... ]
+#
+#     $loc                           = location_as_cbdl( $ftr, $entry )
+#   ( $loc, $partial_5, $partial_3 ) = location_as_cbdl( $ftr, $entry )
+#
+#  Feature location as a SEED or Sapling location string
+#
+#     $loc                           = location_as_seed( $ftr, $entry )
+#   ( $loc, $partial_5, $partial_3 ) = location_as_seed( $ftr, $entry )
+#
+#     $loc                           = location_as_sapling( $ftr, $entry )
+#   ( $loc, $partial_5, $partial_3 ) = location_as_sapling( $ftr, $entry )
+#
 #  Identify features with partial 5' or 3' ends.
 #
 #     $partial_5_prime = partial_5_prime( $ftr )
@@ -156,11 +169,20 @@ package gjogenbank;
 #     @EC_number = EC_number( $ftr )
 #    \@EC_number = EC_number( $ftr )
 #
-#     $translation = CDS_translation( $ftr )          # Uses in situ if found
-#     $translation = CDS_translation( $ftr,  $dna )   # If not in feature, translate
-#     $translation = CDS_translation( $ftr, \$dna )
-#     $translation = CDS_translation( $ftr,  $entry )
+#     $pseudo    = is_pseudo( $ftr )
 #
+#  CDS translation table number
+#
+#     $trans_table = CDS_trans_table( $ftr )
+#
+#  CDS translation (uses the supplied translation if provided)
+#
+#     $translation = CDS_translation( $ftr,  $entry ) # This is the preferred form
+#     $translation = CDS_translation( $ftr,  $dna )   # Assumes code table 1
+#     $translation = CDS_translation( $ftr, \$dna )   # Assumes code table 1
+#     $translation = CDS_translation( $ftr )          # Cannot de novo translate
+#
+#-------------------------------------------------------------------------------
 #  Convert GenBank location to [ [ $contig, $begin, $dir, $length ], ... ]
 #
 #    \@cbdl = genbank_loc_2_cbdl( $loc, $contig_id )
@@ -199,6 +221,9 @@ our @EXPORT = qw( parse_genbank
                   features_of_type
                   feature_list
                   ftr_dna
+                  ftr_seq
+                  CDS_translation
+                  CDS_trans_table
 
                   genbank_loc_2_seed
                   genbank_loc_2_sapling
@@ -208,6 +233,26 @@ our @EXPORT = qw( parse_genbank
                   write_genbank
                 );
 
+our @EXPORT_OK = qw ( next_entry
+                      location
+                      location_as_cbdl
+                      location_as_seed
+                      location_as_sapling
+                      partial_5_prime
+                      partial_3_prime
+                      qualifiers
+                      ftr_id
+                      ftr_locus_tag
+                      ftr_old_tag
+                      ftr_gene_or_id
+                      ftr_gi_or_id
+                      ftr_gi
+                      ftr_xref
+                      gene
+                      product
+                      is_pseudo
+                      EC_number
+                    );
 
 #  An approximate ordering of the common qualifiers in GenBank feature table
 #  entries:
@@ -354,13 +399,20 @@ sub parse_genbank
 #  same parameter will return successive entries.  Calls to different files
 #  can be interlaced.
 #
+#      $entry = next_entry( )         #  STDIN
+#      $entry = next_entry( \*FH )
+#      $entry = next_entry(  $file )
+#
 #      $entry = parse_next_genbank( )         #  STDIN
 #      $entry = parse_next_genbank( \*FH )
-#      $entry = parse_next_genbank( $file )
+#      $entry = parse_next_genbank(  $file )
 #
 #  Error or end-of-file returns undef.
 #-------------------------------------------------------------------------------
-sub parse_next_genbank
+
+sub parse_next_genbank { next_entry( @_ ) }
+
+sub next_entry
 {
     my $file = shift;
 
@@ -1084,6 +1136,44 @@ sub location
 
 
 #-------------------------------------------------------------------------------
+#  Feature location as cbdl = [ [ contig, beg, dir, len ], ... ]
+#
+#     $loc                           = location_as_cbdl( $ftr, $entry )
+#   ( $loc, $partial_5, $partial_3 ) = location_as_cbdl( $ftr, $entry )
+#
+#  Feature location as a SEED or Sapling location string
+#
+#     $loc                           = location_as_seed( $ftr, $entry )
+#   ( $loc, $partial_5, $partial_3 ) = location_as_seed( $ftr, $entry )
+#
+#     $loc                           = location_as_sapling( $ftr, $entry )
+#   ( $loc, $partial_5, $partial_3 ) = location_as_sapling( $ftr, $entry )
+#
+#-------------------------------------------------------------------------------
+
+sub location_as_cbdl
+{
+    genbank_loc_2_cbdl( location( $_[0] ),
+                        ( $_[1]->{ ACCESSION } || [] )->[0] || $_[1]->{ LOCUS },
+                      );
+}
+
+sub location_as_seed
+{
+    genbank_loc_2_seed( ( $_[1]->{ ACCESSION } || [] )->[0] || $_[1]->{ LOCUS },
+                        location( $_[0] )
+                      );
+}
+
+sub location_as_sapling
+{
+    genbank_loc_2_sapling( ( $_[1]->{ ACCESSION } || [] )->[0] || $_[1]->{ LOCUS },
+                           location( $_[0] )
+                         );
+}
+
+
+#-------------------------------------------------------------------------------
 #  Identify features with partial 5' or 3' ends.
 #
 #     $partial_5_prime = partial_5_prime( $ftr )
@@ -1312,6 +1402,15 @@ sub product
 
 
 #-------------------------------------------------------------------------------
+#  Feature is pseudo gene?
+#
+#   $pseudo = is_pseudo( $ftr )
+#
+#-------------------------------------------------------------------------------
+sub is_pseudo { qualifiers( $_[0] )->{ pseudo } ? 1 : 0 }
+
+
+#-------------------------------------------------------------------------------
 #
 #   @EC_number = EC_number( $ftr )
 #  \@EC_number = EC_number( $ftr )
@@ -1327,14 +1426,27 @@ sub EC_number
 
 
 #-------------------------------------------------------------------------------
-#   This is the in situ translation.  Will extract from the DNA sequence if
-#   supplied.
+#  Find a CDS translation table number:
+#
+#   $trans_table = CDS_trans_table( $ftr );
+#
+#-------------------------------------------------------------------------------
+sub CDS_trans_table
+{
+    ( qualifiers( $_[0] )->{ transl_table } || [] )->[0] || 1;
+}
+
+
+#-------------------------------------------------------------------------------
+#  This is the in situ translation.  Will extract from the DNA sequence if
+#  necessary.
 #
 #   $translation = CDS_translation( $ftr )
 #   $translation = CDS_translation( $ftr,  $dna )
 #   $translation = CDS_translation( $ftr, \$dna )
-#   $translation = CDS_translation( $ftr,  $entry )
+#   $translation = CDS_translation( $ftr,  $entry )  #  <--- preferred form
 #
+#  We should look for translation exceptions, but ....
 #
 #-------------------------------------------------------------------------------
 sub CDS_translation
@@ -1346,11 +1458,50 @@ sub CDS_translation
 
     return undef if ! $dna;
 
+    #  Beware that ftr_seq() removes a leading partial codon based on /codon_start
+
+    my $CDS_dna = ftr_seq( $ftr, $dna ) or return undef;
+
+    my $transl_table = $qual->{ transl_table }->[0] || 1;
+
+    my $start_with_met = ! partial_5_prime( $ftr );
+
+    translate_seq_with_NCBI_code( $CDS_dna, $transl_table, $start_with_met );
+}
+
+
+sub translate_seq_with_NCBI_code
+{
+    my ( $seq, $transl_table, $start_with_met ) = @_;
+
     eval { require gjoseqlib; }
         or return undef;
 
-    my $CDS_dna = ftr_dna( $dna, $ftr ) or return undef;
-    my $pep = gjoseqlib::translate_seq( $CDS_dna, ! partial_5_prime( $ftr ) );
+    eval { require NCBI_genetic_code; }
+        or return undef;
+
+    $seq =~ tr/-//d;     #  remove gaps (should never happen)
+    $seq =~ tr/Uu/Tt/;   #  make it DNA
+
+    my $gc = NCBI_genetic_code::genetic_code( $transl_table );
+
+    my $ambigs = \%gjoseqlib::DNA_letter_can_be;
+
+    #  We can now do the codon-by-codon translation:
+
+    my @codons = map { /[a-z]/ ? lc( $_ ) : $_ }
+                 $seq =~ m/(...?)/g;  #  will try to translate last 2 nt
+
+    my @met;
+    if ( $start_with_met && ( my $codon1 = shift @codons ) )
+    {
+        push @met, ( $codon1 =~ /^[a-z]/ ? 'm' : 'M' );
+    }
+
+    my $pep = join( '', @met, map { gjoseqlib::translate_codon_with_user_code( $seq, $gc, $ambigs ) } @codons );
+
+    #  If it ends with stop, and it usually will, remove it
+
     $pep =~ s/\*$// if $pep;
 
     $pep;

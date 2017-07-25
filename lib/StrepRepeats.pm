@@ -9,9 +9,7 @@ use File::Temp qw/ :seekable /;
 use Data::Dumper;
 use Carp;
 
-use Bio::KBase::CDMI::CDMIClient;
 use Bio::KBase::IDServer::Client;
-use Bio::KBase::Utilities::ScriptThing;
 
 use gjoseqlib;
 use SeedUtils;

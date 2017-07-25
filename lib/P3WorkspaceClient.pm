@@ -45,7 +45,7 @@ sub new
         client => Bio::P3::Workspace::WorkspaceClient::RpcClient->new,
         url => $url,
         headers => [],
-	api => P3DataAPI->new(),
+        api => P3DataAPI->new(),
     };
 
     chomp($self->{hostname} = `hostname`);
@@ -102,10 +102,10 @@ sub new
         {
             $token = $ENV{KB_AUTH_TOKEN};
         }
-	elsif ($self->{api}->{token})
-	{
-	    $token = $self->{api}->{token};
-	}
+        elsif ($self->{api}->{token})
+        {
+            $token = $self->{api}->{token};
+        }
         elsif (open($fh, "<", "$ENV{HOME}/.patric_token"))
         {
             $token = <$fh>;
@@ -958,7 +958,6 @@ WorkspacePerm is a string
 sub ls
 {
     my($self, @args) = @_;
-
 # Authentication: optional
 
     if ((my $n = @args) != 1)
@@ -975,7 +974,6 @@ sub ls
             die($msg);
         }
     }
-
     my $result = $self->{client}->call($self->{url}, $self->{headers}, {
         method => "Workspace.ls",
         params => \@args,

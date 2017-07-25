@@ -23,6 +23,9 @@ package P3Utils;
     use warnings;
     use Getopt::Long::Descriptive;
     use Data::Dumper;
+    use LWP::UserAgent;
+    use HTTP::Request;
+    use SeedUtils;
 
 =head1 PATRIC Script Utilities
 
@@ -38,8 +41,12 @@ Mapping from user-friendly names to PATRIC names.
 
 =cut
 
-use constant OBJECTS => {   genome => 'genome', feature => 'genome_feature', family => 'protein_family_ref',
-                            genome_drug => 'genome_amr', contig =>  'genome_sequence' };
+use constant OBJECTS => {   genome => 'genome',
+                            feature => 'genome_feature',
+                            family => 'protein_family_ref',
+                            genome_drug => 'genome_amr',
+                            contig =>  'genome_sequence',
+                            drug => 'antibiotics', };
 
 =head3 FIELDS
 
@@ -51,7 +58,8 @@ use constant FIELDS =>  {   genome => ['genome_id', 'genome_name', 'taxon_id', '
                             feature => ['patric_id', 'feature_type', 'location', 'product'],
                             family => ['family_id', 'family_type', 'family_product'],
                             genome_drug => ['genome_id', 'antibiotic', 'resistant_phenotype'],
-                            contig => ['genome_id', 'accession', 'length', 'taxon_id', 'sequence'] };
+                            contig => ['genome_id', 'accession', 'length', 'taxon_id', 'sequence'],
+                            drug => ['cas_id', 'antibiotic_name', 'canonical_smiles'], };
 
 =head3 IDCOL
 
@@ -59,8 +67,12 @@ Mapping from user-friendly object names to ID column names.
 
 =cut
 
-use constant IDCOL =>   {   genome => 'genome_id', feature => 'patric_id', family => 'family_id',
-                            genome_drug => 'id', contig => 'sequence_id' };
+use constant IDCOL =>   {   genome => 'genome_id',
+                            feature => 'patric_id',
+                            family => 'family_id',
+                            genome_drug => 'id',
+                            contig => 'sequence_id',
+                            drug => 'antibiotic_name' };
 
 =head2  Methods
 
@@ -76,6 +88,11 @@ options. These options are as follows.
 =item attr
 
 Names of the fields to return. Multiple field names may be specified by coding the option multiple times.
+Mutually exclusive with C<--count>.
+
+=item count
+
+If specified, a count of records found will be returned instead of the records themselves. Mutually exclusive with C<--attr>.
 
 =item equal
 
@@ -83,6 +100,11 @@ Equality constraints of the form I<field-name>C<,>I<value>. If the field is nume
 exact match. If the field is a string, the constraint will be a substring match. An asterisk in string values
 is interpreted as a wild card. Multiple equality constraints may be specified by coding the option multiple
 times.
+
+=item lt, le, gt, ge
+
+Inequality constraints of the form I<field-name>C<,>I<value>. Multiple constrains of each type may be specified
+by coding the option multiple times.
 
 =item in
 
@@ -101,7 +123,12 @@ fields may be specified by coding the option multiple times.
 
 sub data_options {
     return (['attr|a=s@', 'field(s) to return'],
+            ['count|K', 'if specified, a count of records returned will be displayed instead of the records themselves'],
             ['equal|eq|e=s@', 'search constraint(s) in the form field_name,value'],
+            ['lt=s@', 'less-than search constraint(s) in the form field_name,value'],
+            ['le=s@', 'less-or-equal search constraint(s) in the form field_name,value'],
+            ['gt=s@', 'greater-than search constraint(s) in the form field_name,value'],
+            ['ge=s@', 'greater-or-equal search constraint(s) in the form field_name,value'],
             ['in=s@', 'any-value search constraint(s) in the form field_name,value1,value2,...,valueN'],
             ['required|r=s@', 'field(s) required to have values']);
 }
@@ -139,6 +166,53 @@ sub col_options {
                 ['batchSize|b=i', 'input batch size', { default => 100 }],
                 ['nohead', 'file has no headers']);
 }
+
+=head3 delim_options
+
+    my @options = P3Utils::delim_options();
+
+This method returns a list of options related to delimiter specification for multi-valued fields.
+
+=over 4
+
+=item delim
+
+The delimiter to use between object names. The default is C<::>. Specify C<tab> for tab-delimited output, C<space> for
+space-delimited output, or C<comma> for comma-delimited output.
+
+=back
+
+=cut
+
+sub delim_options {
+    return (['delim=s', 'delimiter to place between object names', { default => '::' }],
+    );
+}
+
+=head3 delim
+
+    my $delim = P3Utils::delim($opt);
+
+Return the delimiter to use between the elements of multi-valued fields.
+
+=over 4
+
+=item opt
+
+A L<Getopts::Long::Descriptive::Opt> object containing the delimiter specification.
+
+=back
+
+=cut
+
+use constant DELIMS => { space => ' ', tab => "\t", comma => ',', '::' => '::' };
+
+sub delim {
+    my ($opt) = @_;
+    my $retVal = DELIMS->{$opt->delim} // $opt->delim;
+    return $retVal;
+}
+
 
 =head3 get_couplets
 
@@ -372,18 +446,25 @@ sub form_filter {
     my ($opt) = @_;
     # This will be the return list.
     my @retVal;
-    # Get the equality constraints.
-    my $eqList = $opt->equal // [];
-    for my $eqSpec (@$eqList) {
-        # Get the field name and value.
-        my ($field, $value);
-        if ($eqSpec =~ /(\w+),(.+)/) {
-            ($field, $value) = ($1, clean_value($2));
-        } else {
-            die "Invalid --equal specification $eqSpec.";
+    # Get the relational operator constraints.
+    my %opHash = ('eq' => ($opt->equal // []),
+                  'lt' => ($opt->lt // []),
+                  'le' => ($opt->le // []),
+                  'gt' => ($opt->gt // []),
+                  'ge' => ($opt->ge // []));
+    # Loop through them.
+    for my $op (keys %opHash) {
+        for my $opSpec (@{$opHash{$op}}) {
+            # Get the field name and value.
+            my ($field, $value);
+            if ($opSpec =~ /(\w+),(.+)/) {
+                ($field, $value) = ($1, clean_value($2));
+            } else {
+                die "Invalid --$op specification $opSpec.";
+            }
+            # Apply the constraint.
+            push @retVal, [$op, $field, $value];
         }
-        # Apply the constraint.
-        push @retVal, ['eq', $field, $value];
     }
     # Get the inclusion constraints.
     my $inList = $opt->in // [];
@@ -434,7 +515,8 @@ explicitly specified, the ID column will be added if it is not present.
 =item RETURN
 
 Returns a two-element list consisting of a reference to a list of the names of the
-fields to retrieve, and a reference to a list of the proposed headers for the new columns.
+fields to retrieve, and a reference to a list of the proposed headers for the new columns. If the user wants a
+count, the first element will be undefined, and the second will be a singleton list of C<count>.
 
 =back
 
@@ -447,7 +529,15 @@ sub select_clause {
     die "Invalid object $object." if (! $realName);
     # Get the attribute option.
     my $attrList = $opt->attr;
-    if (! $attrList) {
+    if ($opt->count) {
+        # Here the user wants a count, not data.
+        if ($attrList) {
+            die "Cannot specify both --attr and --count.";
+        } else {
+            # Just return a count header.
+            $attrList = ['count'];
+        }
+    } elsif (! $attrList) {
         if ($idFlag) {
             $attrList = [IDCOL->{$object}];
         } else {
@@ -461,6 +551,10 @@ sub select_clause {
     }
     # Form the header list.
     my @headers = map { "$object.$_" } @$attrList;
+    # Clear the attribute list if we are counting.
+    if ($opt->count) {
+        undef $attrList;
+    }
     # Return the results.
     return ($attrList, \@headers);
 }
@@ -519,7 +613,7 @@ Reference to a list of filter clauses for the query.
 
 =item cols
 
-Reference to a list of the names of the fields to return from the object.
+Reference to a list of the names of the fields to return from the object, or C<undef> if a count is desired.
 
 =item fieldName (optional)
 
@@ -546,8 +640,14 @@ sub get_data {
     my @retVal;
     # Convert the object name.
     my $realName = OBJECTS->{$object};
-    # Now we need to form the query modifiers. We start with the column selector.
-    my @mods = (['select', @$cols], @$filter);
+    # Now we need to form the query modifiers. We start with the column selector. If we're counting, we use the ID column.
+    my @selected;
+    if (! $cols) {
+        @selected = IDCOL->{$object};
+    } else {
+        @selected = @$cols;
+    }
+    my @mods = (['select', @selected], @$filter);
     # Finally, we loop through the couplets, making calls. If there are no couplets, we make one call with
     # no additional filtering.
     if (! $fieldName) {
@@ -593,7 +693,7 @@ Reference to a list of filter clauses for the query.
 
 =item cols
 
-Reference to a list of the names of the fields to return from the object.
+Reference to a list of the names of the fields to return from the object, or C<undef> if a count is desired.
 
 =item couplets
 
@@ -676,7 +776,7 @@ Reference to a list of filter clauses for the query.
 
 =item cols
 
-Reference to a list of the names of the fields to return from the object.
+Reference to a list of the names of the fields to return from the object, or C<undef> if a count is desired.
 
 =item keys
 
@@ -922,9 +1022,9 @@ sub match {
     return $retVal;
 }
 
-=head3 match_headers
+=head3 find_headers
 
-    my (\@headers, \@cols) = P3Utils::match_headers($ih, $fileType => @fields);
+    my (\@headers, \@cols) = P3Utils::find_headers($ih, $fileType => @fields);
 
 Search the headers of the specified input file for the named fields and return the list of headers plus a list of
 the column indices for the named fields.
@@ -966,11 +1066,18 @@ sub find_headers {
             $fieldH{$header} = $i;
         }
     }
-    # Accumulate the headers that were not found.
+    # Accumulate the headers that were not found. We also handle numeric column indices in here.
     my @bad;
     for my $field (keys %fieldH) {
         if (! defined $fieldH{$field}) {
-            push @bad, $field;
+            # Is this a number?
+            if ($field =~ /^\d+$/) {
+                # Yes, convert it to an index.
+                $fieldH{$field} = $field - 1;
+            } else {
+                # No, we have a bad header.
+                push @bad, $field;
+            }
         }
     }
     # If any headers were not found, it is an error.
@@ -988,14 +1095,15 @@ sub find_headers {
 
     my @values = P3Utils::get_cols($ih, $cols);
 
-This method returns all the values in the specified columns of the input file, in order. It is meant to be used
-as a companion to L</find_headers>.
+This method returns all the values in the specified columns of the next line of the input file, in order. It is meant to be used
+as a companion to L</find_headers>. A list reference can be used in place of an open file handle, in which case the columns will
+be used to index into the list.
 
 =over 4
 
 =item ih
 
-Open input file handle.
+Open input file handle, or alternatively a list reference.
 
 =item cols
 
@@ -1011,10 +1119,16 @@ Returns a list containing the fields in the specified columns, in order.
 
 sub get_cols {
     my ($ih, $cols) = @_;
-    # Read the input line.
-    my $line = <$ih>;
-    # Get the columns.
-    my @fields = get_fields($line);
+    # Get the list of field values according to the input type.
+    my @fields;
+    if (ref $ih eq 'ARRAY') {
+        @fields = @$ih;
+    } else {
+        # Read the input line.
+        my $line = <$ih>;
+        # Get the columns.
+        @fields = get_fields($line);
+    }
     # Extract the ones we want.
     my @retVal = map { $fields[$_] } @$cols;
     # Return the resulting values.
@@ -1053,6 +1167,47 @@ sub get_fields {
     return @retVal;
 }
 
+=head3 list_object_fields
+
+    my $fieldList = P3Utils::list_object_fields($object);
+
+Return the list of field names for an object. The database schema is queried directly.
+
+=over 4
+
+=item object
+
+The name of the object whose field names are desired.
+
+=item RETURN
+
+Returns a reference to a list of the field names.
+
+=back
+
+=cut
+
+sub list_object_fields {
+    my ($object) = @_;
+    my @retVal;
+    # Get the real name of the object.
+    my $realName = OBJECTS->{$object};
+    # Ask for the JSON schema string.
+    my $ua = LWP::UserAgent->new();
+    my $url = "https://www.patricbrc.org/api/$realName/schema?http_content-type=application/solrquery+x-www-form-urlencoded&http_accept=application/solr+json";
+    my $request = HTTP::Request->new(GET => $url);
+    my $response = $ua->request($request);
+    if ($response->code ne 200) {
+        die "Error response from PATRIC: " . $response->message;
+    } else {
+        my $json = $response->content;
+        my $schema = SeedUtils::read_encoded_object(\$json);
+        @retVal = map { $_->{name} } @{$schema->{schema}{fields}};
+    }
+    # Return the list.
+    return \@retVal;
+}
+
 =head2 Internal Methods
 
 =head3 _process_entries
@@ -1077,7 +1232,7 @@ Reference to a list of values to be prefixed to every output row.
 
 =item cols
 
-Reference to a list of the names of the columns to be put in the output row.
+Reference to a list of the names of the columns to be put in the output row, or C<undef> if the user wants a count.
 
 =back
 
@@ -1085,22 +1240,29 @@ Reference to a list of the names of the columns to be put in the output row.
 
 sub _process_entries {
     my ($retList, $entries, $row, $cols) = @_;
-    for my $entry (@$entries) {
-        my @outCols = map { $entry->{$_} } @$cols;
-        # Process the columns. If any are undefined, we change them
-        # to empty strings. If all are undefined, we throw away the
-        # record.
-        my $reject = 1;
-        for (my $i = 0; $i < @outCols; $i++) {
-            if (! defined $outCols[$i]) {
-                $outCols[$i] = '';
-            } else {
-                $reject = 0;
+    # Are we counting?
+    if (! $cols) {
+        # Yes. Pop on the count.
+        push @$retList, [@$row, scalar(@$entries)];
+    } else {
+        # No. Generate the data.
+        for my $entry (@$entries) {
+            my @outCols = map { $entry->{$_} } @$cols;
+            # Process the columns. If any are undefined, we change them
+            # to empty strings. If all are undefined, we throw away the
+            # record.
+            my $reject = 1;
+            for (my $i = 0; $i < @outCols; $i++) {
+                if (! defined $outCols[$i]) {
+                    $outCols[$i] = '';
+                } else {
+                    $reject = 0;
+                }
             }
-        }
-        # Output the record if it is NOT rejected.
-        if (! $reject) {
-            push @$retList, [@$row, @outCols];
+            # Output the record if it is NOT rejected.
+            if (! $reject) {
+                push @$retList, [@$row, @outCols];
+            }
         }
     }
 }

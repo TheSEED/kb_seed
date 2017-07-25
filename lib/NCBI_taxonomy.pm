@@ -84,7 +84,10 @@ package NCBI_taxonomy;
 #      @values = taxonomy_datum( $xml, @path );
 #
 #-------------------------------------------------------------------------------
-
+#
+#  http://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi';
+#  https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=taxonomy&id=1203605&report=xml
+#
 use strict;
 use SeedAware;
 use Data::Dumper;
@@ -317,7 +320,9 @@ sub taxonomy_xml
     my $curl = SeedAware::executable_for( 'curl' )
         or die "Could not find executable for 'curl'.\n";
 
-    my $url = 'http://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi';
+    #  Changed to https, 2017-07-12
+
+    my $url = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi';
     my $id = shift;
 
     my %request = ( db     => 'taxonomy',
@@ -335,8 +340,11 @@ sub taxonomy_xml
                  #  NCBI has now put <TaxaSet><Taxon> as a single line
                  map  { /^(<\w+>)(<\w+>)$/ ? ( $1, $2 ) : $_ }
                  map  { xml_unescape( $_ ) }         # Decode HTML body content
+                 # map { print STDERR Dumper( $_ ); $_ }
                  map  { chomp; s/^\s+//; s/\s+$//; $_ }
                  SeedAware::run_gathering_output( $curl, '-s', "$url?$request" );
+    # print STDERR Dumper( \@return );
+
     ( xml_items( \@return, undef ) )[0];
 }
 

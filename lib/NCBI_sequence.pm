@@ -127,7 +127,11 @@ sub sequence
     my $ids = shift;
     return wantarray ? () : []  unless $ids;
 
-    my @ids = grep { /^\S+$/ }                  #  No white space in ids
+    my @ids = grep { /^\S+$/ }            #  No white space in ids
+              map  { s/^\s+//;            #  Remove leading  white space
+                     s/\s+$//;            #  Remove trailing white space
+                     split / *, */;       #  Allow comma separated id list (non-standard)
+                   }
               ref $ids eq 'ARRAY' ? @$ids : ( $ids );
     return wantarray ? () : []  unless @ids;
 
@@ -157,8 +161,9 @@ sub sequence
 
     #  XML
 
-    my $xml = sequence_xml( join( ',', @giids ), $options->{ db } );
-    # print STDERR Dumper( $xml ); exit;
+    my $giids = join( ',', @giids );
+    my $xml = sequence_xml( $giids, $options->{ db } );
+    # print STDERR Dumper( $xml );
 
     return wantarray ? () : []  unless $xml && ref( $xml ) eq 'ARRAY' &&  @$xml;
 
@@ -214,7 +219,7 @@ sub sequence
 
 sub sequence_xml
 {
-    my $url = 'http://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi';
+    my $url = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi';
     my $ids = shift;
 
     #  Since gi numbers are unique across the databases, this option does
@@ -236,6 +241,7 @@ sub sequence_xml
                  grep { /./ && ! /^<[?!]/ && ! /^<\/?pre>/ }
                  map  { s/^\s+//; s/\s+$//; $_ }
                  map  { chomp; split /\n/ }
+                 grep { $_ }
                  LWP::Simple::get( "$url?$request" );
 
     ( xml_items( \@return, undef ) )[0];
@@ -344,10 +350,10 @@ sub acc2gi
     my @db = $db ? ( $db ) : ();
     if ( @db < 1 )
     {
-        @db = scalar( grep { /^NC_/i }       @acc ) ? qw( nucleotide )
-            : scalar( grep { /^[NWXYZ]P_/i } @acc ) ? qw( protein )
-            : scalar( grep { /^[PQ]\d/i }    @acc ) ? qw( protein )
-            :                                         qw( nucleotide protein );
+        @db = scalar( grep { /^NC_/i }         @acc ) ? qw( nucleotide )
+            : scalar( grep { /^[NWXYZ]P_/i }   @acc ) ? qw( protein )
+            : scalar( grep { /^[ABIJPOQ]\d/i } @acc ) ? qw( protein )
+            :                                           qw( nucleotide protein );
     }
 
     my @ids;
