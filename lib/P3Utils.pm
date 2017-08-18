@@ -26,6 +26,7 @@ package P3Utils;
     use LWP::UserAgent;
     use HTTP::Request;
     use SeedUtils;
+    use Digest::MD5;
 
 =head1 PATRIC Script Utilities
 
@@ -54,11 +55,11 @@ Mapping from user-friendly object names to default fields.
 
 =cut
 
-use constant FIELDS =>  {   genome => ['genome_id', 'genome_name', 'taxon_id', 'genome_status', 'gc_content'],
-                            feature => ['patric_id', 'feature_type', 'location', 'product'],
+use constant FIELDS =>  {   genome => ['genome_name', 'genome_id', 'genome_status', 'sequences', 'patric_cds', 'isolation_country', 'host_name', 'disease', 'collection_year', 'completion_date'],
+                            feature => ['patric_id', 'refseq_locus_tag', 'gene_id', 'plfam_id', 'pgfam_id', 'product'],
                             family => ['family_id', 'family_type', 'family_product'],
                             genome_drug => ['genome_id', 'antibiotic', 'resistant_phenotype'],
-                            contig => ['genome_id', 'accession', 'length', 'taxon_id', 'sequence'],
+                            contig => ['genome_id', 'accession', 'length', 'gc_content', 'sequence_type', 'topology'],
                             drug => ['cas_id', 'antibiotic_name', 'canonical_smiles'], };
 
 =head3 IDCOL
@@ -74,6 +75,27 @@ use constant IDCOL =>   {   genome => 'genome_id',
                             contig => 'sequence_id',
                             drug => 'antibiotic_name' };
 
+=head3 DERIVED
+
+Mapping from objects to derived fields. For each derived field name we have a list reference consisting of the function name followed by a list of the
+constituent fields.
+
+=cut
+
+use constant DERIVED => {
+            genome =>   {   taxonomy => ['concatSemi', 'taxon_lineage_names'],
+                        },
+            feature =>  {   function => ['altName', 'product'],
+                        },
+            family =>   {
+                        },
+            genome_drug => {
+                        },
+            contig =>   {   md5 => ['md5', 'sequence'],
+                        },
+            drug =>     {
+                        },
+};
 =head2  Methods
 
 =head3 data_options
@@ -81,14 +103,14 @@ use constant IDCOL =>   {   genome => 'genome_id',
     my @opts = P3Utils::data_options();
 
 This method returns a list of the L<Getopt::Long::Descriptive> specifications for the common data retrieval
-options. These options are as follows.
+options. These options include L</delim_options> plus the following.
 
 =over 4
 
 =item attr
 
-Names of the fields to return. Multiple field names may be specified by coding the option multiple times.
-Mutually exclusive with C<--count>.
+Names of the fields to return. Multiple field names may be specified by coding the option multiple times or
+separating the field names with commas.  Mutually exclusive with C<--count>.
 
 =item count
 
@@ -130,7 +152,8 @@ sub data_options {
             ['gt=s@', 'greater-than search constraint(s) in the form field_name,value'],
             ['ge=s@', 'greater-or-equal search constraint(s) in the form field_name,value'],
             ['in=s@', 'any-value search constraint(s) in the form field_name,value1,value2,...,valueN'],
-            ['required|r=s@', 'field(s) required to have values']);
+            ['required|r=s@', 'field(s) required to have values'],
+            delim_options());
 }
 
 =head3 col_options
@@ -178,7 +201,8 @@ This method returns a list of options related to delimiter specification for mul
 =item delim
 
 The delimiter to use between object names. The default is C<::>. Specify C<tab> for tab-delimited output, C<space> for
-space-delimited output, or C<comma> for comma-delimited output.
+space-delimited output, C<semi> for a semicolon followed by a space, or C<comma> for comma-delimited output.
+Other values might have unexpected results.
 
 =back
 
@@ -199,13 +223,13 @@ Return the delimiter to use between the elements of multi-valued fields.
 
 =item opt
 
-A L<Getopts::Long::Descriptive::Opt> object containing the delimiter specification.
+A L<Getopts::Long::Descriptive::Opts> object containing the delimiter specification.
 
 =back
 
 =cut
 
-use constant DELIMS => { space => ' ', tab => "\t", comma => ',', '::' => '::' };
+use constant DELIMS => { space => ' ', tab => "\t", comma => ',', '::' => '::', semi => '; ' };
 
 sub delim {
     my ($opt) = @_;
@@ -213,6 +237,29 @@ sub delim {
     return $retVal;
 }
 
+=head3 undelim
+
+    my $undelim = P3Utils::undelim($opt);
+
+Return the pattern to use to split the elements of multi-valued fields.
+
+=over 4
+
+=item opt
+
+A L<Getopts::Long::Descriptive::Opts> object containing the delimiter specification.
+
+=back
+
+=cut
+
+use constant UNDELIMS => { space => ' ', tab => '\t', comma => ',', '::' => '::', semi => '; ' };
+
+sub undelim {
+    my ($opt) = @_;
+    my $retVal = UNDELIMS->{$opt->delim} // $opt->delim;
+    return $retVal;
+}
 
 =head3 get_couplets
 
@@ -234,7 +281,7 @@ Index of the key column.
 
 =item opt
 
-A L<Getopts::Long::Descriptive::Opt> object containing the batch size specification.
+A L<Getopts::Long::Descriptive::Opts> object containing the batch size specification.
 
 =item RETURN
 
@@ -317,7 +364,7 @@ sub get_col {
 
 =head3 process_headers
 
-    my ($outHeaders, $keyCol) = P3Utils::process_headers($ih, $opt);
+    my ($outHeaders, $keyCol) = P3Utils::process_headers($ih, $opt, $keyless);
 
 Read the header line from a tab-delimited input, format the output headers and compute the index of the key column.
 
@@ -329,10 +376,10 @@ Open input file handle.
 
 =item opt
 
-Should be a L<Getopts::Long::Descriptive::Opt> object containing the specifications for the key
+Should be a L<Getopts::Long::Descriptive::Opts> object containing the specifications for the key
 column or a string containing the key column name. At a minimum, it must support the C<nohead> option.
 
-=item keyless
+=item keyless (optional)
 
 If TRUE, then it is presumed there is no key column.
 
@@ -361,21 +408,7 @@ sub process_headers {
     my $keyCol;
     # Search for the key column.
     if (! $keyless) {
-        my $col;
-        if (ref $opt) {
-            $col = $opt->col;
-        } else {
-            $col = $opt;
-        }
-        if ($col =~ /^\-?\d+$/) {
-            # Here we have a column number.
-            $keyCol = $col - 1;
-        } else {
-            # Here we have a header name.
-            my $n = scalar @outHeaders;
-            for ($keyCol = 0; $keyCol < $n && $outHeaders[$keyCol] ne $col; $keyCol++) {};
-            die "\"$col\" not found in headers." if ($keyCol >= $n);
-        }
+        $keyCol = find_column($opt->col, \@outHeaders);
     }
     # Return the results.
     return (\@outHeaders, $keyCol);
@@ -416,7 +449,18 @@ sub find_column {
         # Here we have a header name.
         my $n = scalar @$headers;
         for ($retVal = 0; $retVal < $n && $headers->[$retVal] ne $col; $retVal++) {};
-        die "\"$col\" not found in headers." if ($retVal >= $n);
+        # If our quick search failed, check for a match past the dot.
+        if ($retVal >= $n) {
+            undef $retVal;
+            for (my $i = 0; $i < $n && ! $retVal; $i++) {
+                if ($headers->[$i] =~ /\.(.+)$/ && $1 eq $col) {
+                    $retVal = $i;
+                }
+            }
+            if (! defined $retVal) {
+                die "\"$col\" not found in headers.";
+            }
+        }
     }
     return $retVal;
 
@@ -505,7 +549,7 @@ Name of the object being retrieved-- C<genome>, C<feature>, C<protein_family>, o
 
 =item opt
 
-L<Getopt::Long::Descriptive::Opt> object for the command-line options, including the C<--attr> option.
+L<Getopt::Long::Descriptive::Opts> object for the command-line options, including the C<--attr> option.
 
 =item idFlag
 
@@ -543,10 +587,15 @@ sub select_clause {
         } else {
             $attrList = FIELDS->{$object};
         }
-    } elsif ($idFlag) {
-        my $idCol = IDCOL->{$object};
-        if (! scalar(grep { $_ eq $idCol } @$attrList)) {
-            unshift @$attrList, $idCol;
+    } else {
+        # Handle comma-splicing.
+        $attrList = [ map { split /,/, $_ } @$attrList ];
+        # If we need an ID field, be sure it's in there.
+        if ($idFlag) {
+            my $idCol = IDCOL->{$object};
+            if (! scalar(grep { $_ eq $idCol } @$attrList)) {
+                unshift @$attrList, $idCol;
+            }
         }
     }
     # Form the header list.
@@ -645,14 +694,15 @@ sub get_data {
     if (! $cols) {
         @selected = IDCOL->{$object};
     } else {
-        @selected = @$cols;
+        my $computed = _select_list($object, $cols);
+        @selected = @$computed;
     }
     my @mods = (['select', @selected], @$filter);
     # Finally, we loop through the couplets, making calls. If there are no couplets, we make one call with
     # no additional filtering.
     if (! $fieldName) {
         my @entries = $p3->query($realName, @mods);
-        _process_entries(\@retVal, \@entries, [], $cols);
+        _process_entries($object, \@retVal, \@entries, [], $cols);
     } else {
         # Here we need to loop through the couplets one at a time.
         for my $couplet (@$couplets) {
@@ -662,7 +712,7 @@ sub get_data {
             # Make the query.
             my @entries = $p3->query($realName, $keyField, @mods);
             # Process the results.
-            _process_entries(\@retVal, \@entries, $row, $cols);
+            _process_entries($object, \@retVal, \@entries, $row, $cols);
         }
     }
     # Return the result rows.
@@ -726,27 +776,30 @@ sub get_data_batch {
     if (! scalar(grep { $_ eq $keyField } @$cols)) {
         @keyList = ($keyField);
     }
-    my @mods = (['select', @keyList, @$cols], @$filter);
+    my $computed = _select_list($object, $cols);
+    my @mods = (['select', @keyList, @$computed], @$filter);
     # Now get the list of key values. These are not cleaned, because we are doing exact matches.
-    my @keys = map { $_->[0] } @$couplets;
-    # Create a filter for the keys.
-    my $keyClause = [in => $keyField, '(' . join(',', @keys) . ')'];
-    # Next we run the query and create a hash mapping keys to return sets.
-    my @results = $p3->query($realName, $keyClause, @mods);
-    my %entries;
-    for my $result (@results) {
-        my $keyValue = $result->{$keyField};
-        push @{$entries{$keyValue}}, $result;
-    }
-    # Empty the results array to save memory.
-    undef @results;
-    # Now loop through the couplets, producing output.
-    # Loop through the couplets, producing output.
-    for my $couplet (@$couplets) {
-        my ($key, $row) = @$couplet;
-        my $entryList = $entries{$key};
-        if ($entryList) {
-            _process_entries(\@retVal, $entryList, $row, $cols);
+    my @keys = grep { $_ ne '' } map { $_->[0] } @$couplets;
+    # Only proceed if we have at least one key.
+    if (scalar @keys) {
+        # Create a filter for the keys.
+        my $keyClause = [in => $keyField, '(' . join(',', @keys) . ')'];
+        # Next we run the query and create a hash mapping keys to return sets.
+        my @results = $p3->query($realName, $keyClause, @mods);
+        my %entries;
+        for my $result (@results) {
+            my $keyValue = $result->{$keyField};
+            push @{$entries{$keyValue}}, $result;
+        }
+        # Empty the results array to save memory.
+        undef @results;
+        # Now loop through the couplets, producing output.
+        for my $couplet (@$couplets) {
+            my ($key, $row) = @$couplet;
+            my $entryList = $entries{$key};
+            if ($entryList) {
+                _process_entries($object, \@retVal, $entryList, $row, $cols);
+            }
         }
     }
     # Return the result rows.
@@ -807,7 +860,8 @@ sub get_data_keyed {
     if (! scalar(grep { $_ eq $keyField } @$cols)) {
         @keyList = ($keyField);
     }
-    my @mods = (['select', @keyList, @$cols], @$filter);
+    my $computed = _select_list($object, $cols);
+    my @mods = (['select', @keyList, @$computed], @$filter);
     # Create a filter for the keys.
     # Loop through the keys, a group at a time.
     my $n = @$keys;
@@ -819,7 +873,7 @@ sub get_data_keyed {
         my $keyClause = [in => $keyField, '(' . join(',', @keys) . ')'];
         # Next we run the query and push the output into the return list.
         my @results = $p3->query($realName, $keyClause, @mods);
-        _process_entries(\@retVal, \@results, [], $cols);
+        _process_entries($object, \@retVal, \@results, [], $cols);
     }
     # Return the result rows.
     return \@retVal;
@@ -868,7 +922,7 @@ sub script_opts {
 
 =head3 print_cols
 
-    P3Utils::print_cols(\@cols, $oh);
+    P3Utils::print_cols(\@cols, %options);
 
 Print a tab-delimited output row.
 
@@ -878,29 +932,56 @@ Print a tab-delimited output row.
 
 Reference to a list of the values to appear in the output row.
 
-=item oh (optional)
+=item options
 
-Open output file handle. The default is the standard output.
+A hash of options, including zero or more of the following.
+
+=over 8
+
+=item oh
+
+Open file handle for the output stream. The default is \*STDOUT.
+
+=item opt
+
+A L<Getopt::Long::Descriptive::Opts> object containing the delimiter option, for computing the delimiter in multi-valued fields.
+
+=item delim
+
+The delimiter to use in multi-valued fields (overrides C<opt>). The default, if neither this nor C<opt> is specified, is a comma (C<,>).
+
+=back
 
 =back
 
 =cut
 
 sub print_cols {
-    my ($cols, $oh) = @_;
-    $oh //= \*STDOUT;
-
+    my ($cols, %options) = @_;
+    # Compute the options.
+    my $oh = $options{oh} || \*STDOUT;
+    my $opt = $options{opt};
+    my $delim = $options{delim};
+    if (! defined $delim) {
+        if (defined $opt && $opt->delim) {
+            $delim = P3Utils::delim($opt);
+        } else {
+            $delim = ',';
+        }
+    }
+    # Loop through the columns, formatting.
     my @r;
     for my $r (@$cols) {
         if (! defined $r) {
             push(@r, '')
         } elsif (ref($r) eq "ARRAY") {
-            my $a = join(",", @{$r});
+            my $a = join($delim, @{$r});
             push(@r, $a);
         } else {
             push(@r, $r);
         }
     }
+    # Print the columns.
     print $oh join("\t", @r) . "\n";
 }
 
@@ -916,7 +997,7 @@ opens the standard input.
 
 =item opt
 
-L<Getopt::Long::Descriptive::Opt> object for the current command-line options.
+L<Getopt::Long::Descriptive::Opts> object for the current command-line options.
 
 =item RETURN
 
@@ -979,8 +1060,8 @@ sub ih_options {
 
 Test a match pattern against a key value and return C<1> if there is a match and C<0> otherwise.
 If the key is numeric, a numeric equality match is performed. If the key is non-numeric, then
-we have a match if any substring of the key is equal to the pattern (case-insensitive). The goal
-here is to more or less replicate the SOLR B<eq> operator.
+we have a match if any subsequence of the words in the key is equal to the pattern (case-insensitive).
+The goal here is to more or less replicate the SOLR B<eq> operator.
 
 =over 4
 
@@ -1012,10 +1093,18 @@ sub match {
         }
     } else {
         # Here we have a substring match.
-        my $patternI = lc $pattern;
-        my $keyI = lc $key;
-        if (index($keyI, $patternI) >= 0) {
-            $retVal = 1;
+        my @patternI = split ' ', lc $pattern;
+        my @keyI = split ' ', lc $key;
+        for (my $i = 0; ! $retVal && $i < scalar @keyI; $i++) {
+            if ($patternI[0] eq $keyI[$i]) {
+                my $possible = 1;
+                for (my $j = 1; $possible && $j < scalar @patternI; $j++) {
+                    if ($patternI[$j] ne $keyI[$i+$j]) {
+                        $possible = 0;
+                    }
+                }
+                $retVal = $possible;
+            }
         }
     }
     # Return the determination indicator.
@@ -1063,6 +1152,14 @@ sub find_headers {
     for (my $i = 0; $i < @headers; $i++) {
         my $header = $headers[$i];
         if (exists $fieldH{$header}) {
+            $fieldH{$header} = $i;
+        }
+    }
+    # Now one more time, looking for abbreviated header names.
+    for (my $i = 0; $i < @headers; $i++) {
+        my @headers = split /\./, $headers[$i];
+        my $header = pop @headers;
+        if (exists $fieldH{$header} && ! defined $fieldH{$header}) {
             $fieldH{$header} = $i;
         }
     }
@@ -1202,21 +1299,34 @@ sub list_object_fields {
     } else {
         my $json = $response->content;
         my $schema = SeedUtils::read_encoded_object(\$json);
-        @retVal = map { $_->{name} } @{$schema->{schema}{fields}};
+        for my $field (@{$schema->{schema}{fields}}) {
+            my $string = $field->{name};
+            if ($field->{multiValued}) {
+                $string .= ' (multi)';
+            }
+            push @retVal, $string;
+        }
+        # Get the derived fields.
+        my $derivedH = DERIVED->{$object};
+        push @retVal, map { "$_ (derived)" } keys %$derivedH;
     }
     # Return the list.
-    return \@retVal;
+    return [sort @retVal];
 }
 
 =head2 Internal Methods
 
 =head3 _process_entries
 
-    P3Utils::_process_entries(\@retList, \@entries, \@row, \@cols);
+    P3Utils::_process_entries($object, \@retList, \@entries, \@row, \@cols);
 
 Process the specified results from a PATRIC query and store them in the output list.
 
 =over 4
+
+=item object
+
+Name of the object queried.
 
 =item retList
 
@@ -1239,25 +1349,37 @@ Reference to a list of the names of the columns to be put in the output row, or 
 =cut
 
 sub _process_entries {
-    my ($retList, $entries, $row, $cols) = @_;
+    my ($object, $retList, $entries, $row, $cols) = @_;
     # Are we counting?
     if (! $cols) {
         # Yes. Pop on the count.
         push @$retList, [@$row, scalar(@$entries)];
     } else {
-        # No. Generate the data.
+        # No. Generate the data. First we need the derived-field hash.
+        my $derivedH = DERIVED->{$object};
+        # Loop through the entries.
         for my $entry (@$entries) {
-            my @outCols = map { $entry->{$_} } @$cols;
-            # Process the columns. If any are undefined, we change them
-            # to empty strings. If all are undefined, we throw away the
-            # record.
+            # Reject the record unless it has real data.
             my $reject = 1;
-            for (my $i = 0; $i < @outCols; $i++) {
-                if (! defined $outCols[$i]) {
-                    $outCols[$i] = '';
-                } else {
-                    $reject = 0;
+            # The output columns will be put in here.
+            my @outCols;
+            # Loop through the columns to create.
+            for my $col (@$cols) {
+                # Get the rule for this column.
+                my $algorithm = $derivedH->{$col} // ['altName', $col];
+                my ($function, @fields) = @$algorithm;
+                my @values = map { $entry->{$_} } @fields;
+                # Verify the values.
+                for (my $i = 0; $i < @values; $i++) {
+                    if (! defined $values[$i]) {
+                        $values[$i] = '';
+                    } else {
+                        $reject = 0;
+                    }
                 }
+                # Now we compute the output value.
+                my $outCol = _apply($function, @values);
+                push @outCols, $outCol;
             }
             # Output the record if it is NOT rejected.
             if (! $reject) {
@@ -1265,6 +1387,101 @@ sub _process_entries {
             }
         }
     }
+}
+
+=head3 _apply
+
+    my $result = _apply($function, @values);
+
+Apply a computational function to values to produce a computed field value.
+
+=over 4
+
+=item function
+
+Name of the function.
+
+=over 8
+
+=item altName
+
+Pass the input value back unmodified.
+
+=item concatSemi
+
+Concatenate the sub-values using a semi-colon/space separator.
+
+=item md5
+
+Compute an MD5 for a DNA or protein sequence.
+
+=back
+
+=item values
+
+List of the input values.
+
+=item RETURN
+
+Returns the computed result.
+
+=back
+
+=cut
+
+sub _apply {
+    my ($function, @values) = @_;
+    my $retVal;
+    if ($function eq 'altName') {
+        $retVal = $values[0];
+    } elsif ($function eq 'concatSemi') {
+        $retVal = join('; ', @{$values[0]});
+    } elsif ($function eq 'md5') {
+        $retVal = Digest::MD5::md5_hex(uc $values[0]);
+    }
+    return $retVal;
+}
+
+=head3 _select_list
+
+    my $fieldList = _select_list($object, $cols);
+
+Compute the list of fields required to retrieve the specified columns. This includes the specified normal fields plus any derived fields.
+
+=over 4
+
+=item object
+
+Name of the object being retrieved.
+
+=item cols
+
+Reference to a list of field names.
+
+=item RETURN
+
+Returns a reference to a list of field names to retrieve.
+
+=back
+
+=cut
+
+sub _select_list {
+    my ($object, $cols) = @_;
+    # The field names will be accumulated in here.
+    my %retVal;
+    # Get the derived-field hash.
+    my $derivedH = DERIVED->{$object};
+    # Loop through the field names.
+    for my $col (@$cols) {
+        my $algorithm = $derivedH->{$col} // ['altName', $col];
+        my ($function, @parms) = @$algorithm;
+        for my $parm (@parms) {
+            $retVal{$parm} = 1;
+        }
+    }
+    # Return the fields needed.
+    return [sort keys %retVal];
 }
 
 1;
