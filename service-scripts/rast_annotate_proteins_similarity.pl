@@ -66,6 +66,7 @@ my $iden_thresh = 50;
 my $evalue_thresh = 1e-5;
 
 my $hypo_only;
+my $null_only;
 my $help;
 my $input_file;
 my $output_file;
@@ -82,6 +83,7 @@ my $rc = GetOptions('help'         => \$help,
 		    'nr-file=s'    => \$nr_file,
 		    'evalue=s'	   => \$evalue_thresh,
 		    'hypothetical_only|H' => \$hypo_only,
+		    'null_only|N' => \$null_only,
 		    );
 
 
@@ -187,7 +189,16 @@ for my $feature ($genomeTO->features)
 {
     next if !$feature->{protein_translation};
     
-    if ($hypo_only) {
+    if ($null_only)
+    {
+	my $f = $feature->{function};
+	if (defined($f) && $f ne '')
+	{
+	    next;
+	}
+    }
+    elsif ($hypo_only)
+    {
 	my $f = $feature->{function};
 	if (defined($f) && $f ne '' && $f !~ /^\s*hypothetical\s+protein\s*$/i) {
 	    next;

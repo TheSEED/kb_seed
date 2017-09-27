@@ -7,6 +7,7 @@ use strict;
 use IPC::Run 'run';
 use Getopt::Long::Descriptive;
 use File::Temp 'tempfile';
+use File::Copy;
 use gjoseqlib;
 use Bio::SearchIO;
 use Digest::MD5 'md5_hex';
@@ -24,6 +25,7 @@ my ($opt, $usage) = describe_options("%c %o",
 				     ["in|i=s", "Input data file"],
 				     ["out|o=s", "Output file"],
 				     ["report|r=s", "Raw BLAST output file"],
+				     ["program=s", "Program to use (blast or blat)", { default => 'blat' }],
 				     ["description=s", "Show descriptions", { default => 'N' }],
 				     ["db=s@", "Database name"],
 				     ["db-dir=s", "Database directory", { default => $default_db_dir}],
@@ -40,6 +42,11 @@ my ($opt, $usage) = describe_options("%c %o",
 
 print($usage->text), exit if $opt->help;
 print($usage->text), exit 1 if (@ARGV != 0);
+
+if ($opt->program ne 'blast' && $opt->program ne 'blat')
+{
+    die "Invalid value for --program option (must be either 'blast' or 'blat')\n";
+}
 
 $cache_db = $opt->cache_db || $cache_db;
 $cache_host = $opt->cache_host || $cache_host;
@@ -160,6 +167,7 @@ while (my($id, $def, $seq) = read_next_fasta_seq(\*IN))
     $id_to_md5{$id} = $md5;
     $md5{$md5}->{$id} = 1;
     push(@ids, $id);
+    # print STDERR "$id\t$md5\n";
 }
 close(IN);
 
@@ -225,16 +233,39 @@ for my $db (@db)
 
     if ($do)
     {
-	my @blastcmd = ("blastp", "-query", $tmp, "-db", $db_file,
-			"-num_threads", $opt->parallel,
-			"-num_alignments", 1, "-num_descriptions", 1,  "-evalue", $opt->evalue, "-outfmt", 0);
-	
-	my $ok = run(\@blastcmd, '>>', $raw_blast_fh);
-	
-	if (!$ok)
+	if ($opt->program eq 'blast')
 	{
-	    die "Blast failed with $?: $@blastcmd\n";
+	    my @cmd = ("blastp", "-query", $tmp, "-db", $db_file,
+		    "-num_threads", $opt->parallel,
+		    "-num_alignments", 1,
+		    "-num_descriptions", 1,
+		    "-evalue", $opt->evalue,
+		    "-outfmt", 0);
+	    my $ok = run(\@cmd, '>>', $raw_blast_fh);
+	    
+	    if (!$ok)
+	    {
+		die "Blast failed with $?: $@cmd\n";
+	    }
 	}
+	else
+	{
+	    my $blat_tmp = File::Temp->new();
+	    close($blat_tmp);
+	    my @cmd = ("blat", "-prot", "$db_file.faa", $tmp, "-out=blast", "$blat_tmp");
+
+	    print "@cmd\n";
+	    my $ok = run(\@cmd);
+	    
+	    if (!$ok)
+	    {
+		die "Blat failed with $?: $@cmd\n";
+	    }
+
+	    File::Copy::copy("$blat_tmp", $raw_blast_fh);
+	}
+		
+	
     }
     unlink($tmp) or warn "Unlink $tmp failed: $!";
 }
@@ -246,61 +277,45 @@ while( my $result = $in->next_result ) {
 
     # $result is a Bio::Search::Result::ResultI compliant object
 
-    while( my $hit = $result->next_hit ) {
+    my $hit = $result->next_hit;
+    if ($hit)
+    {
 	# $hit is a Bio::Search::Hit::HitI compliant object
 	
-	while( my $hsp = $hit->next_hsp ) {
+	my $hsp = $hit->next_hsp;
+	if ($hsp)
+	{
 	    # $hsp is a Bio::Search::HSP::HSPI compliant object
-	    
-	    $result->query_name;
-	    $result->database_name;
-	    $hit->name;
-	    $hsp->query;
-	    $hsp->hit;
-	    $hsp->length('query');
-	    $hsp->length('hit');
-	    $hsp->length('total');
-	    $hsp->percent_identity;
-	    $hsp->start('query');
-	    $hsp->end('query');
-	    $hsp->start('hit');
-	    $hsp->start('hit');
-	    $hsp->pvalue;
-	    $hsp->significance;
-	    $hsp->score;
-	    $hsp->bits;
 	    
 	    my $qid = $result->query_name;
 	    my ($qAnnot, $qOrg) = ($result->query_description, "");
 	    ($qAnnot, $qOrg) = $result->query_description=~/(.*)\s*\[(.*)\]/ if $result->query_description=~/(.*)\s*\[(.*)\]/;
 	    
 	    my $database=$result->database_name;
+	    $database =~ s/\s*$//;
+	    $database =~ s/^\s*//;
+	    
+	    my $dbname = basename($database, '.faa');
 	    
 	    my $sid = $hit->name;
 	    my ($sAnnot, $sOrg) = ($hit->description, "");
 	    ($sAnnot, $sOrg) = $hit->description=~/(.*)\s*\[(.*)\]/ if $hit->description=~/(.*)\s*\[(.*)\]/;
 	    
-	    my $id=int(abs($hsp->percent_identity));	
+	    my $iden=int(abs($hsp->percent_identity));	
 	    my $qcov=int(abs( $hsp->length('query') * 100 / $result->query_length ));
 	    my $scov=int(abs( $hsp->length('hit') * 100 / $hit->length ));
 	    my $pvalue = $hsp->significance;
 	    
-	    my $sim = "";
-	    if ($opt->description eq 'Y'){
-		$sim = "$qid\t$qAnnot\t$qOrg\t$database\t$sid\t$sAnnot\t$sOrg\t$qcov\t$scov\t$id\t$pvalue\n";
-	    }else{
-		$sim = "$qid\t$database\t$sid\t$qcov\t$scov\t$id\t$pvalue\n";
-	    }
 	    
-	    $val{$database}->{$qid} = [$qid, $database, $sid, $qcov, $scov, $id, $pvalue];
-	}  
+	    $val{$dbname}->{$qid} = [$qid, $dbname, $sid, $qcov, $scov, $iden, $pvalue, $qAnnot, $qOrg, $sAnnot, $sOrg];
+	}
     }
 }
 if (!$opt->report)
 {
     unlink($raw_blast);
 }
-# print Dumper(\%val, \%id_to_md5);
+# print STDERR Dumper(\%val);
 
 for my $db (@db)
 {
@@ -331,21 +346,27 @@ for my $db (@db)
 		$sth->execute(@$ent);
 	    }
 	}
-	my(undef, undef, $sid, $qcov, $scov, $iden, $pvalue) = @$ent;
+	my(undef, undef, $sid, $qcov, $scov, $iden, $pvalue, $qAnnot, $qOrg, $sAnnot, $sOrg) = @$ent;
 	if ($sid)
 	{
 	    
 	    if ($opt->filter eq 'Y'){
 		if ($db =~ /Human/i)
 		{
-		    next unless ($qcov>=50 || $scov>=50) && $iden>=50;
+		    next unless ($qcov>=25 || $scov>=25) && $iden>=40;
 		}
 		else
 		{
 		    next unless ($qcov>=80 || $scov>=80) && $iden>=80 ;
 		}
 	    }
-	    print $out_fh join("\t", $id, @$ent[1..$#$ent]), "\n";
+	    my $sim = "";
+	    if ($opt->description eq 'Y') {
+		$sim = "$id\t$qAnnot\t$qOrg\t$db\t$sid\t$sAnnot\t$sOrg\t$qcov\t$scov\t$iden\t$pvalue\n";
+	    } else {
+		$sim = "$id\t$db\t$sid\t$qcov\t$scov\t$iden\t$pvalue\n";
+	    }
+	    print $out_fh $sim;
 	}
     }
 }
