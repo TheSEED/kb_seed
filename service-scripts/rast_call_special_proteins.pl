@@ -92,6 +92,7 @@ my $seleno;
 my $pyrro;
 my $id_prefix = 'rast|0';
 my $id_server;
+my $id_type = 'CDS';
 
 use Getopt::Long;
 my $rc = GetOptions('help'         => \$help,
@@ -100,6 +101,7 @@ my $rc = GetOptions('help'         => \$help,
 		    'tmpdir=s'     => \$temp_dir,
 		    'seleno'       => \$seleno,
 		    'pyrro'        => \$pyrro,
+		    'id-type'      => \$id_type,
 		    'id_prefix=s'  => \$id_prefix,
 		    'id-prefix=s'  => \$id_prefix,
 		    'id-server=s'  => \$id_server,
@@ -207,7 +209,7 @@ foreach my $entry (@results) {
     
     &GenomeTypeObject::add_feature($genomeTO, { -id_client  => $id_client,
 						-id_prefix  => $id_prefix,
-						-type       => 'CDS',
+						-type       => $id_type,
 						-location   => [[ $contig, $beg, $strand, $length ]],
 						-annotator  => 'find_special_proteins',
 						-annotation => 'Add feature called by find_special_proteins',
