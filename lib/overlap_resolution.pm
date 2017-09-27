@@ -452,10 +452,12 @@ sub overlap_rules
         #  This first group of rules only have an effect if $priority is
         #  not defined.  View them as defaults for the tools.
 
-        $score ||= $tool =~ /selenocys/i ? 30
-                 : $tool =~ /pyrrolys/i  ? 30
+
+        $score ||= ( $tool =~ /selenocys/i || $qual->{selenoprotein} ) ? 50
+                 : ( $tool =~ /pyrrolys/i || $qual->{pyrrolysylprotein} ) ? 50
                  : $tool =~ /prodigal/i  ?  6 * ($size/900)**0.90
                  :                          5 * ($size/900)**0.90;
+
 
         #  Some bonuses:
 
