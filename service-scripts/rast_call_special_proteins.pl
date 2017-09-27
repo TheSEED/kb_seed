@@ -209,7 +209,7 @@ foreach my $entry (@results) {
     
     &GenomeTypeObject::add_feature($genomeTO, { -id_client  => $id_client,
 						-id_prefix  => $id_prefix,
-						-type       => 'CDS,
+						-type       => 'CDS',
 						-id_type    => $id_type,
 						-location   => [[ $contig, $beg, $strand, $length ]],
 						-annotator  => 'find_special_proteins',
