@@ -191,7 +191,7 @@ chomp $hostname;
 #
 delete $params->{contigs};
 my $event = {
-    tool_name => "find_special_proteins",
+    tool_name => "find_special_proteins " . join(" ", keys %$qual),
     execute_time => scalar gettimeofday,
     parameters => [ %$params ], 
     hostname => $hostname,

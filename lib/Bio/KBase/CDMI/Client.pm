@@ -1,17 +1,10 @@
 package Bio::KBase::CDMI::Client;
 
-use JSON::RPC::Legacy::Client;
-use POSIX;
+use JSON::RPC::Client;
 use strict;
 use Data::Dumper;
 use URI;
 use Bio::KBase::Exceptions;
-my $get_time = sub { time, 0 };
-eval {
-    require Time::HiRes;
-    $get_time = sub { Time::HiRes::gettimeofday() };
-};
-
 
 # Client version should match Impl version
 # This is a Semantic Version number,
@@ -116,47 +109,13 @@ sub new
     
     if (!defined($url))
     {
-	$url = 'http://kbase.us/services/cdmi_api';
+	$url = 'http://140.221.84.182:7032';
     }
 
     my $self = {
 	client => Bio::KBase::CDMI::Client::RpcClient->new,
 	url => $url,
-	headers => [],
     };
-
-    chomp($self->{hostname} = `hostname`);
-    $self->{hostname} ||= 'unknown-host';
-
-    #
-    # Set up for propagating KBRPC_TAG and KBRPC_METADATA environment variables through
-    # to invoked services. If these values are not set, we create a new tag
-    # and a metadata field with basic information about the invoking script.
-    #
-    if ($ENV{KBRPC_TAG})
-    {
-	$self->{kbrpc_tag} = $ENV{KBRPC_TAG};
-    }
-    else
-    {
-	my ($t, $us) = &$get_time();
-	$us = sprintf("%06d", $us);
-	my $ts = strftime("%Y-%m-%dT%H:%M:%S.${us}Z", gmtime $t);
-	$self->{kbrpc_tag} = "C:$0:$self->{hostname}:$$:$ts";
-    }
-    push(@{$self->{headers}}, 'Kbrpc-Tag', $self->{kbrpc_tag});
-
-    if ($ENV{KBRPC_METADATA})
-    {
-	$self->{kbrpc_metadata} = $ENV{KBRPC_METADATA};
-	push(@{$self->{headers}}, 'Kbrpc-Metadata', $self->{kbrpc_metadata});
-    }
-
-    if ($ENV{KBRPC_ERROR_DEST})
-    {
-	$self->{kbrpc_error_dest} = $ENV{KBRPC_ERROR_DEST};
-	push(@{$self->{headers}}, 'Kbrpc-Errordest', $self->{kbrpc_error_dest});
-    }
 
 
     my $ua = $self->{client}->ua;	 
@@ -249,7 +208,7 @@ sub fids_to_annotations
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.fids_to_annotations",
 	params => \@args,
     });
@@ -337,7 +296,7 @@ sub fids_to_functions
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.fids_to_functions",
 	params => \@args,
     });
@@ -442,7 +401,7 @@ sub fids_to_literature
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.fids_to_literature",
 	params => \@args,
     });
@@ -536,7 +495,7 @@ sub fids_to_protein_families
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.fids_to_protein_families",
 	params => \@args,
     });
@@ -627,7 +586,7 @@ sub fids_to_roles
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.fids_to_roles",
 	params => \@args,
     });
@@ -719,7 +678,7 @@ sub fids_to_subsystems
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.fids_to_subsystems",
 	params => \@args,
     });
@@ -827,7 +786,7 @@ sub fids_to_co_occurring_fids
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.fids_to_co_occurring_fids",
 	params => \@args,
     });
@@ -945,7 +904,7 @@ sub fids_to_locations
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.fids_to_locations",
 	params => \@args,
     });
@@ -1037,7 +996,7 @@ sub locations_to_fids
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.locations_to_fids",
 	params => \@args,
     });
@@ -1130,7 +1089,7 @@ sub alleles_to_bp_locs
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.alleles_to_bp_locs",
 	params => \@args,
     });
@@ -1233,7 +1192,7 @@ sub region_to_fids
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.region_to_fids",
 	params => \@args,
     });
@@ -1338,7 +1297,7 @@ sub region_to_alleles
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.region_to_alleles",
 	params => \@args,
     });
@@ -1427,7 +1386,7 @@ sub alleles_to_traits
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.alleles_to_traits",
 	params => \@args,
     });
@@ -1516,7 +1475,7 @@ sub traits_to_alleles
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.traits_to_alleles",
 	params => \@args,
     });
@@ -1623,7 +1582,7 @@ sub ous_with_trait
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.ous_with_trait",
 	params => \@args,
     });
@@ -1738,7 +1697,7 @@ sub locations_to_dna_sequences
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.locations_to_dna_sequences",
 	params => \@args,
     });
@@ -1830,7 +1789,7 @@ sub proteins_to_fids
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.proteins_to_fids",
 	params => \@args,
     });
@@ -1925,7 +1884,7 @@ sub proteins_to_protein_families
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.proteins_to_protein_families",
 	params => \@args,
     });
@@ -2028,7 +1987,7 @@ sub proteins_to_literature
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.proteins_to_literature",
 	params => \@args,
     });
@@ -2134,7 +2093,7 @@ sub proteins_to_functions
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.proteins_to_functions",
 	params => \@args,
     });
@@ -2239,7 +2198,7 @@ sub proteins_to_roles
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.proteins_to_roles",
 	params => \@args,
     });
@@ -2330,7 +2289,7 @@ sub roles_to_proteins
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.roles_to_proteins",
 	params => \@args,
     });
@@ -2421,7 +2380,7 @@ sub roles_to_subsystems
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.roles_to_subsystems",
 	params => \@args,
     });
@@ -2513,7 +2472,7 @@ sub roles_to_protein_families
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.roles_to_protein_families",
 	params => \@args,
     });
@@ -2610,7 +2569,7 @@ sub fids_to_coexpressed_fids
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.fids_to_coexpressed_fids",
 	params => \@args,
     });
@@ -2701,7 +2660,7 @@ sub protein_families_to_fids
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.protein_families_to_fids",
 	params => \@args,
     });
@@ -2792,7 +2751,7 @@ sub protein_families_to_proteins
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.protein_families_to_proteins",
 	params => \@args,
     });
@@ -2880,7 +2839,7 @@ sub protein_families_to_functions
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.protein_families_to_functions",
 	params => \@args,
     });
@@ -2983,7 +2942,7 @@ sub protein_families_to_co_occurring_families
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.protein_families_to_co_occurring_families",
 	params => \@args,
     });
@@ -3089,7 +3048,7 @@ sub co_occurrence_evidence
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.co_occurrence_evidence",
 	params => \@args,
     });
@@ -3178,7 +3137,7 @@ sub contigs_to_sequences
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.contigs_to_sequences",
 	params => \@args,
     });
@@ -3269,7 +3228,7 @@ sub contigs_to_lengths
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.contigs_to_lengths",
 	params => \@args,
     });
@@ -3361,7 +3320,7 @@ sub contigs_to_md5s
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.contigs_to_md5s",
 	params => \@args,
     });
@@ -3456,7 +3415,7 @@ sub md5s_to_genomes
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.md5s_to_genomes",
 	params => \@args,
     });
@@ -3548,7 +3507,7 @@ sub genomes_to_md5s
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.genomes_to_md5s",
 	params => \@args,
     });
@@ -3639,7 +3598,7 @@ sub genomes_to_contigs
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.genomes_to_contigs",
 	params => \@args,
     });
@@ -3737,7 +3696,7 @@ sub genomes_to_fids
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.genomes_to_fids",
 	params => \@args,
     });
@@ -3857,7 +3816,7 @@ sub genomes_to_taxonomies
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.genomes_to_taxonomies",
 	params => \@args,
     });
@@ -3959,7 +3918,7 @@ sub genomes_to_subsystems
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.genomes_to_subsystems",
 	params => \@args,
     });
@@ -4055,7 +4014,7 @@ sub subsystems_to_genomes
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.subsystems_to_genomes",
 	params => \@args,
     });
@@ -4161,7 +4120,7 @@ sub subsystems_to_fids
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.subsystems_to_fids",
 	params => \@args,
     });
@@ -4258,7 +4217,7 @@ sub subsystems_to_roles
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.subsystems_to_roles",
 	params => \@args,
     });
@@ -4370,7 +4329,7 @@ sub subsystems_to_spreadsheets
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.subsystems_to_spreadsheets",
 	params => \@args,
     });
@@ -4444,7 +4403,7 @@ sub all_roles_used_in_models
 							       "Invalid argument count for function all_roles_used_in_models (received $n, expecting 0)");
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.all_roles_used_in_models",
 	params => \@args,
     });
@@ -4555,7 +4514,7 @@ sub complexes_to_complex_data
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.complexes_to_complex_data",
 	params => \@args,
     });
@@ -4662,7 +4621,7 @@ sub genomes_to_genome_data
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.genomes_to_genome_data",
 	params => \@args,
     });
@@ -4759,7 +4718,7 @@ sub fids_to_regulon_data
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.fids_to_regulon_data",
 	params => \@args,
     });
@@ -4848,7 +4807,7 @@ sub regulons_to_fids
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.regulons_to_fids",
 	params => \@args,
     });
@@ -4977,7 +4936,7 @@ sub fids_to_feature_data
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.fids_to_feature_data",
 	params => \@args,
     });
@@ -5082,7 +5041,7 @@ sub equiv_sequence_assertions
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.equiv_sequence_assertions",
 	params => \@args,
     });
@@ -5180,7 +5139,7 @@ sub fids_to_atomic_regulons
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.fids_to_atomic_regulons",
 	params => \@args,
     });
@@ -5270,7 +5229,7 @@ sub atomic_regulons_to_fids
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.atomic_regulons_to_fids",
 	params => \@args,
     });
@@ -5360,7 +5319,7 @@ sub fids_to_protein_sequences
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.fids_to_protein_sequences",
 	params => \@args,
     });
@@ -5447,7 +5406,7 @@ sub fids_to_proteins
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.fids_to_proteins",
 	params => \@args,
     });
@@ -5535,7 +5494,7 @@ sub fids_to_dna_sequences
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.fids_to_dna_sequences",
 	params => \@args,
     });
@@ -5638,7 +5597,7 @@ sub roles_to_fids
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.roles_to_fids",
 	params => \@args,
     });
@@ -5737,7 +5696,7 @@ sub reactions_to_complexes
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.reactions_to_complexes",
 	params => \@args,
     });
@@ -5824,7 +5783,7 @@ sub aliases_to_fids
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.aliases_to_fids",
 	params => \@args,
     });
@@ -5914,7 +5873,7 @@ sub aliases_to_fids_by_source
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.aliases_to_fids_by_source",
 	params => \@args,
     });
@@ -6001,7 +5960,7 @@ sub source_ids_to_fids
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.source_ids_to_fids",
 	params => \@args,
     });
@@ -6091,7 +6050,7 @@ sub external_ids_to_fids
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.external_ids_to_fids",
 	params => \@args,
     });
@@ -6182,7 +6141,7 @@ sub reaction_strings
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.reaction_strings",
 	params => \@args,
     });
@@ -6279,7 +6238,7 @@ sub roles_to_complexes
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.roles_to_complexes",
 	params => \@args,
     });
@@ -6368,7 +6327,7 @@ sub complexes_to_roles
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.complexes_to_roles",
 	params => \@args,
     });
@@ -6469,7 +6428,7 @@ sub fids_to_subsystem_data
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.fids_to_subsystem_data",
 	params => \@args,
     });
@@ -6554,7 +6513,7 @@ sub representative
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.representative",
 	params => \@args,
     });
@@ -6641,7 +6600,7 @@ sub otu_members
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.otu_members",
 	params => \@args,
     });
@@ -6724,7 +6683,7 @@ sub otus_to_representatives
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.otus_to_representatives",
 	params => \@args,
     });
@@ -6811,7 +6770,7 @@ sub fids_to_genomes
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.fids_to_genomes",
 	params => \@args,
     });
@@ -6917,7 +6876,7 @@ sub text_search
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.text_search",
 	params => \@args,
     });
@@ -7029,7 +6988,7 @@ sub corresponds
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.corresponds",
 	params => \@args,
     });
@@ -7181,7 +7140,7 @@ sub corresponds_from_sequences
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.corresponds_from_sequences",
 	params => \@args,
     });
@@ -7287,7 +7246,7 @@ sub close_genomes
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.close_genomes",
 	params => \@args,
     });
@@ -7405,7 +7364,7 @@ sub representative_sequences
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.representative_sequences",
 	params => \@args,
     });
@@ -7687,7 +7646,7 @@ sub align_sequences
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.align_sequences",
 	params => \@args,
     });
@@ -7809,7 +7768,7 @@ sub build_tree
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.build_tree",
 	params => \@args,
     });
@@ -7910,7 +7869,7 @@ sub alignment_by_id
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.alignment_by_id",
 	params => \@args,
     });
@@ -7995,7 +7954,7 @@ sub tree_by_id
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.tree_by_id",
 	params => \@args,
     });
@@ -8067,7 +8026,7 @@ sub all_entities
 							       "Invalid argument count for function all_entities (received $n, expecting 0)");
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.all_entities",
 	params => \@args,
     });
@@ -8139,7 +8098,7 @@ sub all_relationships
 							       "Invalid argument count for function all_relationships (received $n, expecting 0)");
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.all_relationships",
 	params => \@args,
     });
@@ -8249,7 +8208,7 @@ sub get_entity
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.get_entity",
 	params => \@args,
     });
@@ -8361,7 +8320,7 @@ sub get_relationship
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_API.get_relationship",
 	params => \@args,
     });
@@ -8457,7 +8416,7 @@ sub get_all
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_all",
 	params => \@args,
     });
@@ -8615,7 +8574,7 @@ sub get_entity_Alignment
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Alignment",
 	params => \@args,
     });
@@ -8729,7 +8688,7 @@ sub query_entity_Alignment
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Alignment",
 	params => \@args,
     });
@@ -8840,7 +8799,7 @@ sub all_entities_Alignment
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Alignment",
 	params => \@args,
     });
@@ -8938,7 +8897,7 @@ sub get_entity_AlignmentAttribute
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_AlignmentAttribute",
 	params => \@args,
     });
@@ -9032,7 +8991,7 @@ sub query_entity_AlignmentAttribute
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_AlignmentAttribute",
 	params => \@args,
     });
@@ -9123,7 +9082,7 @@ sub all_entities_AlignmentAttribute
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_AlignmentAttribute",
 	params => \@args,
     });
@@ -9269,7 +9228,7 @@ sub get_entity_AlignmentRow
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_AlignmentRow",
 	params => \@args,
     });
@@ -9379,7 +9338,7 @@ sub query_entity_AlignmentRow
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_AlignmentRow",
 	params => \@args,
     });
@@ -9486,7 +9445,7 @@ sub all_entities_AlignmentRow
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_AlignmentRow",
 	params => \@args,
     });
@@ -9623,7 +9582,7 @@ sub get_entity_AlleleFrequency
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_AlleleFrequency",
 	params => \@args,
     });
@@ -9731,7 +9690,7 @@ sub query_entity_AlleleFrequency
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_AlleleFrequency",
 	params => \@args,
     });
@@ -9836,7 +9795,7 @@ sub all_entities_AlleleFrequency
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_AlleleFrequency",
 	params => \@args,
     });
@@ -9953,7 +9912,7 @@ sub get_entity_Annotation
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Annotation",
 	params => \@args,
     });
@@ -10053,7 +10012,7 @@ sub query_entity_Annotation
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Annotation",
 	params => \@args,
     });
@@ -10150,7 +10109,7 @@ sub all_entities_Annotation
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Annotation",
 	params => \@args,
     });
@@ -10263,7 +10222,7 @@ sub get_entity_Assay
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Assay",
 	params => \@args,
     });
@@ -10363,7 +10322,7 @@ sub query_entity_Assay
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Assay",
 	params => \@args,
     });
@@ -10460,7 +10419,7 @@ sub all_entities_Assay
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Assay",
 	params => \@args,
     });
@@ -10587,7 +10546,7 @@ sub get_entity_Association
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Association",
 	params => \@args,
     });
@@ -10691,7 +10650,7 @@ sub query_entity_Association
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Association",
 	params => \@args,
     });
@@ -10792,7 +10751,7 @@ sub all_entities_Association
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Association",
 	params => \@args,
     });
@@ -10913,7 +10872,7 @@ sub get_entity_AssociationDataset
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_AssociationDataset",
 	params => \@args,
     });
@@ -11015,7 +10974,7 @@ sub query_entity_AssociationDataset
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_AssociationDataset",
 	params => \@args,
     });
@@ -11114,7 +11073,7 @@ sub all_entities_AssociationDataset
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_AssociationDataset",
 	params => \@args,
     });
@@ -11217,7 +11176,7 @@ sub get_entity_AssociationDetectionType
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_AssociationDetectionType",
 	params => \@args,
     });
@@ -11313,7 +11272,7 @@ sub query_entity_AssociationDetectionType
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_AssociationDetectionType",
 	params => \@args,
     });
@@ -11406,7 +11365,7 @@ sub all_entities_AssociationDetectionType
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_AssociationDetectionType",
 	params => \@args,
     });
@@ -11505,7 +11464,7 @@ sub get_entity_AtomicRegulon
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_AtomicRegulon",
 	params => \@args,
     });
@@ -11599,7 +11558,7 @@ sub query_entity_AtomicRegulon
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_AtomicRegulon",
 	params => \@args,
     });
@@ -11690,7 +11649,7 @@ sub all_entities_AtomicRegulon
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_AtomicRegulon",
 	params => \@args,
     });
@@ -11793,7 +11752,7 @@ sub get_entity_Attribute
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Attribute",
 	params => \@args,
     });
@@ -11889,7 +11848,7 @@ sub query_entity_Attribute
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Attribute",
 	params => \@args,
     });
@@ -11982,7 +11941,7 @@ sub all_entities_Attribute
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Attribute",
 	params => \@args,
     });
@@ -12129,7 +12088,7 @@ sub get_entity_Biomass
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Biomass",
 	params => \@args,
     });
@@ -12239,7 +12198,7 @@ sub query_entity_Biomass
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Biomass",
 	params => \@args,
     });
@@ -12346,7 +12305,7 @@ sub all_entities_Biomass
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Biomass",
 	params => \@args,
     });
@@ -12468,7 +12427,7 @@ sub get_entity_CodonUsage
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_CodonUsage",
 	params => \@args,
     });
@@ -12570,7 +12529,7 @@ sub query_entity_CodonUsage
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_CodonUsage",
 	params => \@args,
     });
@@ -12669,7 +12628,7 @@ sub all_entities_CodonUsage
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_CodonUsage",
 	params => \@args,
     });
@@ -12783,7 +12742,7 @@ sub get_entity_Complex
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Complex",
 	params => \@args,
     });
@@ -12883,7 +12842,7 @@ sub query_entity_Complex
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Complex",
 	params => \@args,
     });
@@ -12980,7 +12939,7 @@ sub all_entities_Complex
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Complex",
 	params => \@args,
     });
@@ -13136,7 +13095,7 @@ sub get_entity_Compound
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Compound",
 	params => \@args,
     });
@@ -13250,7 +13209,7 @@ sub query_entity_Compound
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Compound",
 	params => \@args,
     });
@@ -13361,7 +13320,7 @@ sub all_entities_Compound
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Compound",
 	params => \@args,
     });
@@ -13469,7 +13428,7 @@ sub get_entity_CompoundInstance
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_CompoundInstance",
 	params => \@args,
     });
@@ -13567,7 +13526,7 @@ sub query_entity_CompoundInstance
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_CompoundInstance",
 	params => \@args,
     });
@@ -13662,7 +13621,7 @@ sub all_entities_CompoundInstance
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_CompoundInstance",
 	params => \@args,
     });
@@ -13777,7 +13736,7 @@ sub get_entity_ConservedDomainModel
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_ConservedDomainModel",
 	params => \@args,
     });
@@ -13877,7 +13836,7 @@ sub query_entity_ConservedDomainModel
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_ConservedDomainModel",
 	params => \@args,
     });
@@ -13974,7 +13933,7 @@ sub all_entities_ConservedDomainModel
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_ConservedDomainModel",
 	params => \@args,
     });
@@ -14083,7 +14042,7 @@ sub get_entity_Contig
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Contig",
 	params => \@args,
     });
@@ -14179,7 +14138,7 @@ sub query_entity_Contig
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Contig",
 	params => \@args,
     });
@@ -14272,7 +14231,7 @@ sub all_entities_Contig
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Contig",
 	params => \@args,
     });
@@ -14376,7 +14335,7 @@ sub get_entity_ContigChunk
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_ContigChunk",
 	params => \@args,
     });
@@ -14472,7 +14431,7 @@ sub query_entity_ContigChunk
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_ContigChunk",
 	params => \@args,
     });
@@ -14565,7 +14524,7 @@ sub all_entities_ContigChunk
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_ContigChunk",
 	params => \@args,
     });
@@ -14673,7 +14632,7 @@ sub get_entity_ContigSequence
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_ContigSequence",
 	params => \@args,
     });
@@ -14769,7 +14728,7 @@ sub query_entity_ContigSequence
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_ContigSequence",
 	params => \@args,
     });
@@ -14862,7 +14821,7 @@ sub all_entities_ContigSequence
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_ContigSequence",
 	params => \@args,
     });
@@ -14974,7 +14933,7 @@ sub get_entity_CoregulatedSet
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_CoregulatedSet",
 	params => \@args,
     });
@@ -15072,7 +15031,7 @@ sub query_entity_CoregulatedSet
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_CoregulatedSet",
 	params => \@args,
     });
@@ -15167,7 +15126,7 @@ sub all_entities_CoregulatedSet
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_CoregulatedSet",
 	params => \@args,
     });
@@ -15275,7 +15234,7 @@ sub get_entity_Diagram
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Diagram",
 	params => \@args,
     });
@@ -15373,7 +15332,7 @@ sub query_entity_Diagram
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Diagram",
 	params => \@args,
     });
@@ -15468,7 +15427,7 @@ sub all_entities_Diagram
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Diagram",
 	params => \@args,
     });
@@ -15577,7 +15536,7 @@ sub get_entity_EcNumber
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_EcNumber",
 	params => \@args,
     });
@@ -15675,7 +15634,7 @@ sub query_entity_EcNumber
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_EcNumber",
 	params => \@args,
     });
@@ -15770,7 +15729,7 @@ sub all_entities_EcNumber
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_EcNumber",
 	params => \@args,
     });
@@ -15875,7 +15834,7 @@ sub get_entity_Effector
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Effector",
 	params => \@args,
     });
@@ -15973,7 +15932,7 @@ sub query_entity_Effector
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Effector",
 	params => \@args,
     });
@@ -16068,7 +16027,7 @@ sub all_entities_Effector
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Effector",
 	params => \@args,
     });
@@ -16195,7 +16154,7 @@ sub get_entity_Environment
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Environment",
 	params => \@args,
     });
@@ -16299,7 +16258,7 @@ sub query_entity_Environment
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Environment",
 	params => \@args,
     });
@@ -16400,7 +16359,7 @@ sub all_entities_Environment
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Environment",
 	params => \@args,
     });
@@ -16503,7 +16462,7 @@ sub get_entity_Experiment
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Experiment",
 	params => \@args,
     });
@@ -16599,7 +16558,7 @@ sub query_entity_Experiment
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Experiment",
 	params => \@args,
     });
@@ -16692,7 +16651,7 @@ sub all_entities_Experiment
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Experiment",
 	params => \@args,
     });
@@ -16819,7 +16778,7 @@ sub get_entity_ExperimentMeta
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_ExperimentMeta",
 	params => \@args,
     });
@@ -16923,7 +16882,7 @@ sub query_entity_ExperimentMeta
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_ExperimentMeta",
 	params => \@args,
     });
@@ -17024,7 +16983,7 @@ sub all_entities_ExperimentMeta
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_ExperimentMeta",
 	params => \@args,
     });
@@ -17128,7 +17087,7 @@ sub get_entity_ExperimentalUnit
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_ExperimentalUnit",
 	params => \@args,
     });
@@ -17224,7 +17183,7 @@ sub query_entity_ExperimentalUnit
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_ExperimentalUnit",
 	params => \@args,
     });
@@ -17317,7 +17276,7 @@ sub all_entities_ExperimentalUnit
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_ExperimentalUnit",
 	params => \@args,
     });
@@ -17438,7 +17397,7 @@ sub get_entity_ExperimentalUnitGroup
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_ExperimentalUnitGroup",
 	params => \@args,
     });
@@ -17540,7 +17499,7 @@ sub query_entity_ExperimentalUnitGroup
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_ExperimentalUnitGroup",
 	params => \@args,
     });
@@ -17639,7 +17598,7 @@ sub all_entities_ExperimentalUnitGroup
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_ExperimentalUnitGroup",
 	params => \@args,
     });
@@ -17772,7 +17731,7 @@ sub get_entity_Family
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Family",
 	params => \@args,
     });
@@ -17874,7 +17833,7 @@ sub query_entity_Family
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Family",
 	params => \@args,
     });
@@ -17973,7 +17932,7 @@ sub all_entities_Family
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Family",
 	params => \@args,
     });
@@ -18106,7 +18065,7 @@ sub get_entity_Feature
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Feature",
 	params => \@args,
     });
@@ -18210,7 +18169,7 @@ sub query_entity_Feature
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Feature",
 	params => \@args,
     });
@@ -18311,7 +18270,7 @@ sub all_entities_Feature
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Feature",
 	params => \@args,
     });
@@ -18490,7 +18449,7 @@ sub get_entity_Genome
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Genome",
 	params => \@args,
     });
@@ -18610,7 +18569,7 @@ sub query_entity_Genome
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Genome",
 	params => \@args,
     });
@@ -18727,7 +18686,7 @@ sub all_entities_Genome
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Genome",
 	params => \@args,
     });
@@ -18876,7 +18835,7 @@ sub get_entity_Locality
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Locality",
 	params => \@args,
     });
@@ -18988,7 +18947,7 @@ sub query_entity_Locality
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Locality",
 	params => \@args,
     });
@@ -19097,7 +19056,7 @@ sub all_entities_Locality
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Locality",
 	params => \@args,
     });
@@ -19197,7 +19156,7 @@ sub get_entity_LocalizedCompound
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_LocalizedCompound",
 	params => \@args,
     });
@@ -19291,7 +19250,7 @@ sub query_entity_LocalizedCompound
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_LocalizedCompound",
 	params => \@args,
     });
@@ -19382,7 +19341,7 @@ sub all_entities_LocalizedCompound
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_LocalizedCompound",
 	params => \@args,
     });
@@ -19503,7 +19462,7 @@ sub get_entity_Location
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Location",
 	params => \@args,
     });
@@ -19605,7 +19564,7 @@ sub query_entity_Location
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Location",
 	params => \@args,
     });
@@ -19704,7 +19663,7 @@ sub all_entities_Location
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Location",
 	params => \@args,
     });
@@ -19825,7 +19784,7 @@ sub get_entity_LocationInstance
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_LocationInstance",
 	params => \@args,
     });
@@ -19927,7 +19886,7 @@ sub query_entity_LocationInstance
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_LocationInstance",
 	params => \@args,
     });
@@ -20026,7 +19985,7 @@ sub all_entities_LocationInstance
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_LocationInstance",
 	params => \@args,
     });
@@ -20171,7 +20130,7 @@ sub get_entity_Measurement
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Measurement",
 	params => \@args,
     });
@@ -20281,7 +20240,7 @@ sub query_entity_Measurement
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Measurement",
 	params => \@args,
     });
@@ -20388,7 +20347,7 @@ sub all_entities_Measurement
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Measurement",
 	params => \@args,
     });
@@ -20514,7 +20473,7 @@ sub get_entity_MeasurementDescription
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_MeasurementDescription",
 	params => \@args,
     });
@@ -20618,7 +20577,7 @@ sub query_entity_MeasurementDescription
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_MeasurementDescription",
 	params => \@args,
     });
@@ -20719,7 +20678,7 @@ sub all_entities_MeasurementDescription
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_MeasurementDescription",
 	params => \@args,
     });
@@ -20847,7 +20806,7 @@ sub get_entity_Media
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Media",
 	params => \@args,
     });
@@ -20951,7 +20910,7 @@ sub query_entity_Media
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Media",
 	params => \@args,
     });
@@ -21052,7 +21011,7 @@ sub all_entities_Media
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Media",
 	params => \@args,
     });
@@ -21197,7 +21156,7 @@ sub get_entity_Model
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Model",
 	params => \@args,
     });
@@ -21307,7 +21266,7 @@ sub query_entity_Model
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Model",
 	params => \@args,
     });
@@ -21414,7 +21373,7 @@ sub all_entities_Model
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Model",
 	params => \@args,
     });
@@ -21510,7 +21469,7 @@ sub get_entity_OTU
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_OTU",
 	params => \@args,
     });
@@ -21604,7 +21563,7 @@ sub query_entity_OTU
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_OTU",
 	params => \@args,
     });
@@ -21695,7 +21654,7 @@ sub all_entities_OTU
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_OTU",
 	params => \@args,
     });
@@ -21808,7 +21767,7 @@ sub get_entity_ObservationalUnit
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_ObservationalUnit",
 	params => \@args,
     });
@@ -21908,7 +21867,7 @@ sub query_entity_ObservationalUnit
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_ObservationalUnit",
 	params => \@args,
     });
@@ -22005,7 +21964,7 @@ sub all_entities_ObservationalUnit
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_ObservationalUnit",
 	params => \@args,
     });
@@ -22130,7 +22089,7 @@ sub get_entity_Ontology
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Ontology",
 	params => \@args,
     });
@@ -22232,7 +22191,7 @@ sub query_entity_Ontology
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Ontology",
 	params => \@args,
     });
@@ -22331,7 +22290,7 @@ sub all_entities_Ontology
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Ontology",
 	params => \@args,
     });
@@ -22424,7 +22383,7 @@ sub get_entity_Operon
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Operon",
 	params => \@args,
     });
@@ -22518,7 +22477,7 @@ sub query_entity_Operon
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Operon",
 	params => \@args,
     });
@@ -22609,7 +22568,7 @@ sub all_entities_Operon
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Operon",
 	params => \@args,
     });
@@ -22715,7 +22674,7 @@ sub get_entity_PairSet
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_PairSet",
 	params => \@args,
     });
@@ -22811,7 +22770,7 @@ sub query_entity_PairSet
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_PairSet",
 	params => \@args,
     });
@@ -22904,7 +22863,7 @@ sub all_entities_PairSet
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_PairSet",
 	params => \@args,
     });
@@ -23004,7 +22963,7 @@ sub get_entity_Pairing
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Pairing",
 	params => \@args,
     });
@@ -23098,7 +23057,7 @@ sub query_entity_Pairing
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Pairing",
 	params => \@args,
     });
@@ -23189,7 +23148,7 @@ sub all_entities_Pairing
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Pairing",
 	params => \@args,
     });
@@ -23285,7 +23244,7 @@ sub get_entity_Parameter
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Parameter",
 	params => \@args,
     });
@@ -23379,7 +23338,7 @@ sub query_entity_Parameter
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Parameter",
 	params => \@args,
     });
@@ -23470,7 +23429,7 @@ sub all_entities_Parameter
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Parameter",
 	params => \@args,
     });
@@ -23595,7 +23554,7 @@ sub get_entity_Person
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Person",
 	params => \@args,
     });
@@ -23699,7 +23658,7 @@ sub query_entity_Person
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Person",
 	params => \@args,
     });
@@ -23800,7 +23759,7 @@ sub all_entities_Person
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Person",
 	params => \@args,
     });
@@ -23925,7 +23884,7 @@ sub get_entity_Platform
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Platform",
 	params => \@args,
     });
@@ -24029,7 +23988,7 @@ sub query_entity_Platform
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Platform",
 	params => \@args,
     });
@@ -24130,7 +24089,7 @@ sub all_entities_Platform
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Platform",
 	params => \@args,
     });
@@ -24226,7 +24185,7 @@ sub get_entity_ProbeSet
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_ProbeSet",
 	params => \@args,
     });
@@ -24320,7 +24279,7 @@ sub query_entity_ProbeSet
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_ProbeSet",
 	params => \@args,
     });
@@ -24411,7 +24370,7 @@ sub all_entities_ProbeSet
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_ProbeSet",
 	params => \@args,
     });
@@ -24518,7 +24477,7 @@ sub get_entity_ProteinSequence
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_ProteinSequence",
 	params => \@args,
     });
@@ -24614,7 +24573,7 @@ sub query_entity_ProteinSequence
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_ProteinSequence",
 	params => \@args,
     });
@@ -24707,7 +24666,7 @@ sub all_entities_ProteinSequence
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_ProteinSequence",
 	params => \@args,
     });
@@ -24821,7 +24780,7 @@ sub get_entity_Protocol
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Protocol",
 	params => \@args,
     });
@@ -24921,7 +24880,7 @@ sub query_entity_Protocol
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Protocol",
 	params => \@args,
     });
@@ -25018,7 +24977,7 @@ sub all_entities_Protocol
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Protocol",
 	params => \@args,
     });
@@ -25136,7 +25095,7 @@ sub get_entity_Publication
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Publication",
 	params => \@args,
     });
@@ -25236,7 +25195,7 @@ sub query_entity_Publication
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Publication",
 	params => \@args,
     });
@@ -25333,7 +25292,7 @@ sub all_entities_Publication
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Publication",
 	params => \@args,
     });
@@ -25489,7 +25448,7 @@ sub get_entity_Reaction
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Reaction",
 	params => \@args,
     });
@@ -25603,7 +25562,7 @@ sub query_entity_Reaction
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Reaction",
 	params => \@args,
     });
@@ -25714,7 +25673,7 @@ sub all_entities_Reaction
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Reaction",
 	params => \@args,
     });
@@ -25822,7 +25781,7 @@ sub get_entity_ReactionInstance
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_ReactionInstance",
 	params => \@args,
     });
@@ -25920,7 +25879,7 @@ sub query_entity_ReactionInstance
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_ReactionInstance",
 	params => \@args,
     });
@@ -26015,7 +25974,7 @@ sub all_entities_ReactionInstance
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_ReactionInstance",
 	params => \@args,
     });
@@ -26138,7 +26097,7 @@ sub get_entity_Regulator
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Regulator",
 	params => \@args,
     });
@@ -26242,7 +26201,7 @@ sub query_entity_Regulator
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Regulator",
 	params => \@args,
     });
@@ -26343,7 +26302,7 @@ sub all_entities_Regulator
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Regulator",
 	params => \@args,
     });
@@ -26442,7 +26401,7 @@ sub get_entity_Regulog
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Regulog",
 	params => \@args,
     });
@@ -26538,7 +26497,7 @@ sub query_entity_Regulog
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Regulog",
 	params => \@args,
     });
@@ -26631,7 +26590,7 @@ sub all_entities_Regulog
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Regulog",
 	params => \@args,
     });
@@ -26740,7 +26699,7 @@ sub get_entity_RegulogCollection
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_RegulogCollection",
 	params => \@args,
     });
@@ -26838,7 +26797,7 @@ sub query_entity_RegulogCollection
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_RegulogCollection",
 	params => \@args,
     });
@@ -26933,7 +26892,7 @@ sub all_entities_RegulogCollection
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_RegulogCollection",
 	params => \@args,
     });
@@ -27038,7 +26997,7 @@ sub get_entity_Regulome
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Regulome",
 	params => \@args,
     });
@@ -27136,7 +27095,7 @@ sub query_entity_Regulome
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Regulome",
 	params => \@args,
     });
@@ -27231,7 +27190,7 @@ sub all_entities_Regulome
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Regulome",
 	params => \@args,
     });
@@ -27330,7 +27289,7 @@ sub get_entity_Regulon
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Regulon",
 	params => \@args,
     });
@@ -27426,7 +27385,7 @@ sub query_entity_Regulon
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Regulon",
 	params => \@args,
     });
@@ -27519,7 +27478,7 @@ sub all_entities_Regulon
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Regulon",
 	params => \@args,
     });
@@ -27615,7 +27574,7 @@ sub get_entity_ReplicateGroup
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_ReplicateGroup",
 	params => \@args,
     });
@@ -27709,7 +27668,7 @@ sub query_entity_ReplicateGroup
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_ReplicateGroup",
 	params => \@args,
     });
@@ -27800,7 +27759,7 @@ sub all_entities_ReplicateGroup
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_ReplicateGroup",
 	params => \@args,
     });
@@ -27905,7 +27864,7 @@ sub get_entity_Role
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Role",
 	params => \@args,
     });
@@ -28001,7 +27960,7 @@ sub query_entity_Role
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Role",
 	params => \@args,
     });
@@ -28094,7 +28053,7 @@ sub all_entities_Role
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Role",
 	params => \@args,
     });
@@ -28192,7 +28151,7 @@ sub get_entity_SSCell
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_SSCell",
 	params => \@args,
     });
@@ -28286,7 +28245,7 @@ sub query_entity_SSCell
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_SSCell",
 	params => \@args,
     });
@@ -28377,7 +28336,7 @@ sub all_entities_SSCell
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_SSCell",
 	params => \@args,
     });
@@ -28489,7 +28448,7 @@ sub get_entity_SSRow
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_SSRow",
 	params => \@args,
     });
@@ -28587,7 +28546,7 @@ sub query_entity_SSRow
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_SSRow",
 	params => \@args,
     });
@@ -28682,7 +28641,7 @@ sub all_entities_SSRow
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_SSRow",
 	params => \@args,
     });
@@ -28852,7 +28811,7 @@ sub get_entity_Sample
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Sample",
 	params => \@args,
     });
@@ -28970,7 +28929,7 @@ sub query_entity_Sample
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Sample",
 	params => \@args,
     });
@@ -29085,7 +29044,7 @@ sub all_entities_Sample
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Sample",
 	params => \@args,
     });
@@ -29193,7 +29152,7 @@ sub get_entity_SampleAnnotation
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_SampleAnnotation",
 	params => \@args,
     });
@@ -29291,7 +29250,7 @@ sub query_entity_SampleAnnotation
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_SampleAnnotation",
 	params => \@args,
     });
@@ -29386,7 +29345,7 @@ sub all_entities_SampleAnnotation
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_SampleAnnotation",
 	params => \@args,
     });
@@ -29492,7 +29451,7 @@ sub get_entity_Scenario
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Scenario",
 	params => \@args,
     });
@@ -29588,7 +29547,7 @@ sub query_entity_Scenario
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Scenario",
 	params => \@args,
     });
@@ -29681,7 +29640,7 @@ sub all_entities_Scenario
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Scenario",
 	params => \@args,
     });
@@ -29818,7 +29777,7 @@ sub get_entity_Series
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Series",
 	params => \@args,
     });
@@ -29926,7 +29885,7 @@ sub query_entity_Series
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Series",
 	params => \@args,
     });
@@ -30031,7 +29990,7 @@ sub all_entities_Series
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Series",
 	params => \@args,
     });
@@ -30146,7 +30105,7 @@ sub get_entity_Source
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Source",
 	params => \@args,
     });
@@ -30246,7 +30205,7 @@ sub query_entity_Source
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Source",
 	params => \@args,
     });
@@ -30343,7 +30302,7 @@ sub all_entities_Source
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Source",
 	params => \@args,
     });
@@ -30476,7 +30435,7 @@ sub get_entity_Strain
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Strain",
 	params => \@args,
     });
@@ -30582,7 +30541,7 @@ sub query_entity_Strain
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Strain",
 	params => \@args,
     });
@@ -30685,7 +30644,7 @@ sub all_entities_Strain
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Strain",
 	params => \@args,
     });
@@ -30798,7 +30757,7 @@ sub get_entity_StudyExperiment
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_StudyExperiment",
 	params => \@args,
     });
@@ -30898,7 +30857,7 @@ sub query_entity_StudyExperiment
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_StudyExperiment",
 	params => \@args,
     });
@@ -30995,7 +30954,7 @@ sub all_entities_StudyExperiment
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_StudyExperiment",
 	params => \@args,
     });
@@ -31141,7 +31100,7 @@ sub get_entity_Subsystem
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Subsystem",
 	params => \@args,
     });
@@ -31251,7 +31210,7 @@ sub query_entity_Subsystem
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Subsystem",
 	params => \@args,
     });
@@ -31358,7 +31317,7 @@ sub all_entities_Subsystem
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Subsystem",
 	params => \@args,
     });
@@ -31454,7 +31413,7 @@ sub get_entity_SubsystemClass
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_SubsystemClass",
 	params => \@args,
     });
@@ -31548,7 +31507,7 @@ sub query_entity_SubsystemClass
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_SubsystemClass",
 	params => \@args,
     });
@@ -31639,7 +31598,7 @@ sub all_entities_SubsystemClass
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_SubsystemClass",
 	params => \@args,
     });
@@ -31762,7 +31721,7 @@ sub get_entity_TaxonomicGrouping
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_TaxonomicGrouping",
 	params => \@args,
     });
@@ -31864,7 +31823,7 @@ sub query_entity_TaxonomicGrouping
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_TaxonomicGrouping",
 	params => \@args,
     });
@@ -31963,7 +31922,7 @@ sub all_entities_TaxonomicGrouping
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_TaxonomicGrouping",
 	params => \@args,
     });
@@ -32084,7 +32043,7 @@ sub get_entity_TimeSeries
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_TimeSeries",
 	params => \@args,
     });
@@ -32186,7 +32145,7 @@ sub query_entity_TimeSeries
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_TimeSeries",
 	params => \@args,
     });
@@ -32285,7 +32244,7 @@ sub all_entities_TimeSeries
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_TimeSeries",
 	params => \@args,
     });
@@ -32404,7 +32363,7 @@ sub get_entity_Trait
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Trait",
 	params => \@args,
     });
@@ -32506,7 +32465,7 @@ sub query_entity_Trait
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Trait",
 	params => \@args,
     });
@@ -32605,7 +32564,7 @@ sub all_entities_Trait
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Trait",
 	params => \@args,
     });
@@ -32750,7 +32709,7 @@ sub get_entity_Tree
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Tree",
 	params => \@args,
     });
@@ -32860,7 +32819,7 @@ sub query_entity_Tree
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Tree",
 	params => \@args,
     });
@@ -32967,7 +32926,7 @@ sub all_entities_Tree
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Tree",
 	params => \@args,
     });
@@ -33065,7 +33024,7 @@ sub get_entity_TreeAttribute
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_TreeAttribute",
 	params => \@args,
     });
@@ -33159,7 +33118,7 @@ sub query_entity_TreeAttribute
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_TreeAttribute",
 	params => \@args,
     });
@@ -33250,7 +33209,7 @@ sub all_entities_TreeAttribute
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_TreeAttribute",
 	params => \@args,
     });
@@ -33348,7 +33307,7 @@ sub get_entity_TreeNodeAttribute
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_TreeNodeAttribute",
 	params => \@args,
     });
@@ -33442,7 +33401,7 @@ sub query_entity_TreeNodeAttribute
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_TreeNodeAttribute",
 	params => \@args,
     });
@@ -33533,7 +33492,7 @@ sub all_entities_TreeNodeAttribute
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_TreeNodeAttribute",
 	params => \@args,
     });
@@ -33657,7 +33616,7 @@ sub get_entity_Variant
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_entity_Variant",
 	params => \@args,
     });
@@ -33759,7 +33718,7 @@ sub query_entity_Variant
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.query_entity_Variant",
 	params => \@args,
     });
@@ -33858,7 +33817,7 @@ sub all_entities_Variant
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.all_entities_Variant",
 	params => \@args,
     });
@@ -33984,7 +33943,7 @@ sub get_relationship_AffectsLevelOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_AffectsLevelOf",
 	params => \@args,
     });
@@ -34098,7 +34057,7 @@ sub get_relationship_IsAffectedIn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsAffectedIn",
 	params => \@args,
     });
@@ -34242,7 +34201,7 @@ sub get_relationship_Aligned
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_Aligned",
 	params => \@args,
     });
@@ -34378,7 +34337,7 @@ sub get_relationship_WasAlignedBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_WasAlignedBy",
 	params => \@args,
     });
@@ -34534,7 +34493,7 @@ sub get_relationship_AssertsFunctionFor
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_AssertsFunctionFor",
 	params => \@args,
     });
@@ -34662,7 +34621,7 @@ sub get_relationship_HasAssertedFunctionFrom
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasAssertedFunctionFrom",
 	params => \@args,
     });
@@ -34818,7 +34777,7 @@ sub get_relationship_AssociationFeature
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_AssociationFeature",
 	params => \@args,
     });
@@ -34954,7 +34913,7 @@ sub get_relationship_FeatureInteractsIn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_FeatureInteractsIn",
 	params => \@args,
     });
@@ -35107,7 +35066,7 @@ sub get_relationship_CompoundMeasuredBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_CompoundMeasuredBy",
 	params => \@args,
     });
@@ -35253,7 +35212,7 @@ sub get_relationship_MeasuresCompound
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_MeasuresCompound",
 	params => \@args,
     });
@@ -35379,7 +35338,7 @@ sub get_relationship_Concerns
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_Concerns",
 	params => \@args,
     });
@@ -35497,7 +35456,7 @@ sub get_relationship_IsATopicOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsATopicOf",
 	params => \@args,
     });
@@ -35638,7 +35597,7 @@ sub get_relationship_ConsistsOfCompounds
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_ConsistsOfCompounds",
 	params => \@args,
     });
@@ -35766,7 +35725,7 @@ sub get_relationship_ComponentOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_ComponentOf",
 	params => \@args,
     });
@@ -35896,7 +35855,7 @@ sub get_relationship_Contains
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_Contains",
 	params => \@args,
     });
@@ -36016,7 +35975,7 @@ sub get_relationship_IsContainedIn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsContainedIn",
 	params => \@args,
     });
@@ -36194,7 +36153,7 @@ sub get_relationship_ContainsAlignedDNA
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_ContainsAlignedDNA",
 	params => \@args,
     });
@@ -36336,7 +36295,7 @@ sub get_relationship_IsAlignedDNAComponentOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsAlignedDNAComponentOf",
 	params => \@args,
     });
@@ -36514,7 +36473,7 @@ sub get_relationship_ContainsAlignedProtein
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_ContainsAlignedProtein",
 	params => \@args,
     });
@@ -36656,7 +36615,7 @@ sub get_relationship_IsAlignedProteinComponentOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsAlignedProteinComponentOf",
 	params => \@args,
     });
@@ -36797,7 +36756,7 @@ sub get_relationship_ContainsExperimentalUnit
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_ContainsExperimentalUnit",
 	params => \@args,
     });
@@ -36921,7 +36880,7 @@ sub get_relationship_GroupedBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_GroupedBy",
 	params => \@args,
     });
@@ -37053,7 +37012,7 @@ sub get_relationship_Controls
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_Controls",
 	params => \@args,
     });
@@ -37177,7 +37136,7 @@ sub get_relationship_IsControlledUsing
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsControlledUsing",
 	params => \@args,
     });
@@ -37315,7 +37274,7 @@ sub get_relationship_DefaultControlSample
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_DefaultControlSample",
 	params => \@args,
     });
@@ -37445,7 +37404,7 @@ sub get_relationship_SamplesDefaultControl
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_SamplesDefaultControl",
 	params => \@args,
     });
@@ -37588,7 +37547,7 @@ sub get_relationship_Describes
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_Describes",
 	params => \@args,
     });
@@ -37722,7 +37681,7 @@ sub get_relationship_IsDescribedBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsDescribedBy",
 	params => \@args,
     });
@@ -37866,7 +37825,7 @@ sub get_relationship_DescribesAlignment
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_DescribesAlignment",
 	params => \@args,
     });
@@ -37998,7 +37957,7 @@ sub get_relationship_HasAlignmentAttribute
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasAlignmentAttribute",
 	params => \@args,
     });
@@ -38142,7 +38101,7 @@ sub get_relationship_DescribesMeasurement
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_DescribesMeasurement",
 	params => \@args,
     });
@@ -38278,7 +38237,7 @@ sub get_relationship_IsDefinedBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsDefinedBy",
 	params => \@args,
     });
@@ -38418,7 +38377,7 @@ sub get_relationship_DescribesTree
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_DescribesTree",
 	params => \@args,
     });
@@ -38546,7 +38505,7 @@ sub get_relationship_HasTreeAttribute
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasTreeAttribute",
 	params => \@args,
     });
@@ -38692,7 +38651,7 @@ sub get_relationship_DescribesTreeNode
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_DescribesTreeNode",
 	params => \@args,
     });
@@ -38822,7 +38781,7 @@ sub get_relationship_HasNodeAttribute
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasNodeAttribute",
 	params => \@args,
     });
@@ -38953,7 +38912,7 @@ sub get_relationship_DetectedWithMethod
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_DetectedWithMethod",
 	params => \@args,
     });
@@ -39075,7 +39034,7 @@ sub get_relationship_DetectedBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_DetectedBy",
 	params => \@args,
     });
@@ -39226,7 +39185,7 @@ sub get_relationship_Displays
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_Displays",
 	params => \@args,
     });
@@ -39364,7 +39323,7 @@ sub get_relationship_IsDisplayedOn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsDisplayedOn",
 	params => \@args,
     });
@@ -39490,7 +39449,7 @@ sub get_relationship_Encompasses
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_Encompasses",
 	params => \@args,
     });
@@ -39606,7 +39565,7 @@ sub get_relationship_IsEncompassedIn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsEncompassedIn",
 	params => \@args,
     });
@@ -39738,7 +39697,7 @@ sub get_relationship_EvaluatedIn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_EvaluatedIn",
 	params => \@args,
     });
@@ -39862,7 +39821,7 @@ sub get_relationship_IncludesStrain
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IncludesStrain",
 	params => \@args,
     });
@@ -39989,7 +39948,7 @@ sub get_relationship_FeatureIsTranscriptionFactorFor
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_FeatureIsTranscriptionFactorFor",
 	params => \@args,
     });
@@ -40111,7 +40070,7 @@ sub get_relationship_HasTranscriptionFactorFeature
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasTranscriptionFactorFeature",
 	params => \@args,
     });
@@ -40254,7 +40213,7 @@ sub get_relationship_FeatureMeasuredBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_FeatureMeasuredBy",
 	params => \@args,
     });
@@ -40390,7 +40349,7 @@ sub get_relationship_MeasuresFeature
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_MeasuresFeature",
 	params => \@args,
     });
@@ -40518,7 +40477,7 @@ sub get_relationship_Formulated
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_Formulated",
 	params => \@args,
     });
@@ -40638,7 +40597,7 @@ sub get_relationship_WasFormulatedBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_WasFormulatedBy",
 	params => \@args,
     });
@@ -40764,7 +40723,7 @@ sub get_relationship_GeneratedLevelsFor
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_GeneratedLevelsFor",
 	params => \@args,
     });
@@ -40878,7 +40837,7 @@ sub get_relationship_WasGeneratedFrom
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_WasGeneratedFrom",
 	params => \@args,
     });
@@ -41034,7 +40993,7 @@ sub get_relationship_GenomeParentOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_GenomeParentOf",
 	params => \@args,
     });
@@ -41182,7 +41141,7 @@ sub get_relationship_DerivedFromGenome
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_DerivedFromGenome",
 	params => \@args,
     });
@@ -41321,7 +41280,7 @@ sub get_relationship_HasAliasAssertedFrom
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasAliasAssertedFrom",
 	params => \@args,
     });
@@ -41449,7 +41408,7 @@ sub get_relationship_AssertsAliasFor
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_AssertsAliasFor",
 	params => \@args,
     });
@@ -41600,7 +41559,7 @@ sub get_relationship_HasCompoundAliasFrom
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasCompoundAliasFrom",
 	params => \@args,
     });
@@ -41738,7 +41697,7 @@ sub get_relationship_UsesAliasForCompound
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_UsesAliasForCompound",
 	params => \@args,
     });
@@ -41859,7 +41818,7 @@ sub get_relationship_HasEffector
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasEffector",
 	params => \@args,
     });
@@ -41975,7 +41934,7 @@ sub get_relationship_IsEffectorFor
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsEffectorFor",
 	params => \@args,
     });
@@ -42105,7 +42064,7 @@ sub get_relationship_HasExperimentalUnit
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasExperimentalUnit",
 	params => \@args,
     });
@@ -42227,7 +42186,7 @@ sub get_relationship_IsExperimentalUnitOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsExperimentalUnitOf",
 	params => \@args,
     });
@@ -42370,7 +42329,7 @@ sub get_relationship_HasExpressionSample
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasExpressionSample",
 	params => \@args,
     });
@@ -42506,7 +42465,7 @@ sub get_relationship_SampleBelongsToExperimentalUnit
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_SampleBelongsToExperimentalUnit",
 	params => \@args,
     });
@@ -42651,7 +42610,7 @@ sub get_relationship_HasGenomes
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasGenomes",
 	params => \@args,
     });
@@ -42791,7 +42750,7 @@ sub get_relationship_IsInRegulogCollection
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsInRegulogCollection",
 	params => \@args,
     });
@@ -42933,7 +42892,7 @@ sub get_relationship_HasIndicatedSignalFrom
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasIndicatedSignalFrom",
 	params => \@args,
     });
@@ -43059,7 +43018,7 @@ sub get_relationship_IndicatesSignalFor
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IndicatesSignalFor",
 	params => \@args,
     });
@@ -43199,7 +43158,7 @@ sub get_relationship_HasKnockoutIn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasKnockoutIn",
 	params => \@args,
     });
@@ -43331,7 +43290,7 @@ sub get_relationship_KnockedOutIn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_KnockedOutIn",
 	params => \@args,
     });
@@ -43467,7 +43426,7 @@ sub get_relationship_HasMeasurement
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasMeasurement",
 	params => \@args,
     });
@@ -43595,7 +43554,7 @@ sub get_relationship_IsMeasureOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsMeasureOf",
 	params => \@args,
     });
@@ -43732,7 +43691,7 @@ sub get_relationship_HasMember
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasMember",
 	params => \@args,
     });
@@ -43860,7 +43819,7 @@ sub get_relationship_IsMemberOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsMemberOf",
 	params => \@args,
     });
@@ -43994,7 +43953,7 @@ sub get_relationship_HasParameter
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasParameter",
 	params => \@args,
     });
@@ -44116,7 +44075,7 @@ sub get_relationship_OfEnvironment
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_OfEnvironment",
 	params => \@args,
     });
@@ -44263,7 +44222,7 @@ sub get_relationship_HasParticipant
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasParticipant",
 	params => \@args,
     });
@@ -44397,7 +44356,7 @@ sub get_relationship_ParticipatesIn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_ParticipatesIn",
 	params => \@args,
     });
@@ -44564,7 +44523,7 @@ sub get_relationship_HasPresenceOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasPresenceOf",
 	params => \@args,
     });
@@ -44710,7 +44669,7 @@ sub get_relationship_IsPresentIn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsPresentIn",
 	params => \@args,
     });
@@ -44845,7 +44804,7 @@ sub get_relationship_HasProteinMember
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasProteinMember",
 	params => \@args,
     });
@@ -44967,7 +44926,7 @@ sub get_relationship_IsProteinMemberOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsProteinMemberOf",
 	params => \@args,
     });
@@ -45118,7 +45077,7 @@ sub get_relationship_HasReactionAliasFrom
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasReactionAliasFrom",
 	params => \@args,
     });
@@ -45256,7 +45215,7 @@ sub get_relationship_UsesAliasForReaction
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_UsesAliasForReaction",
 	params => \@args,
     });
@@ -45377,7 +45336,7 @@ sub get_relationship_HasRegulogs
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasRegulogs",
 	params => \@args,
     });
@@ -45493,7 +45452,7 @@ sub get_relationship_IsInCollection
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsInCollection",
 	params => \@args,
     });
@@ -45647,7 +45606,7 @@ sub get_relationship_HasRepresentativeOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasRepresentativeOf",
 	params => \@args,
     });
@@ -45791,7 +45750,7 @@ sub get_relationship_IsRepresentedIn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsRepresentedIn",
 	params => \@args,
     });
@@ -45929,7 +45888,7 @@ sub get_relationship_HasRequirementOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasRequirementOf",
 	params => \@args,
     });
@@ -46059,7 +46018,7 @@ sub get_relationship_IsARequirementOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsARequirementOf",
 	params => \@args,
     });
@@ -46185,7 +46144,7 @@ sub get_relationship_HasResultsIn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasResultsIn",
 	params => \@args,
     });
@@ -46299,7 +46258,7 @@ sub get_relationship_HasResultsFor
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasResultsFor",
 	params => \@args,
     });
@@ -46421,7 +46380,7 @@ sub get_relationship_HasSection
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasSection",
 	params => \@args,
     });
@@ -46535,7 +46494,7 @@ sub get_relationship_IsSectionOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsSectionOf",
 	params => \@args,
     });
@@ -46679,7 +46638,7 @@ sub get_relationship_HasStep
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasStep",
 	params => \@args,
     });
@@ -46815,7 +46774,7 @@ sub get_relationship_IsStepOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsStepOf",
 	params => \@args,
     });
@@ -46964,7 +46923,7 @@ sub get_relationship_HasTrait
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasTrait",
 	params => \@args,
     });
@@ -47094,7 +47053,7 @@ sub get_relationship_Measures
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_Measures",
 	params => \@args,
     });
@@ -47236,7 +47195,7 @@ sub get_relationship_HasUnits
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasUnits",
 	params => \@args,
     });
@@ -47370,7 +47329,7 @@ sub get_relationship_IsLocated
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsLocated",
 	params => \@args,
     });
@@ -47492,7 +47451,7 @@ sub get_relationship_HasUsage
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasUsage",
 	params => \@args,
     });
@@ -47606,7 +47565,7 @@ sub get_relationship_IsUsageOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsUsageOf",
 	params => \@args,
     });
@@ -47734,7 +47693,7 @@ sub get_relationship_HasValueFor
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasValueFor",
 	params => \@args,
     });
@@ -47850,7 +47809,7 @@ sub get_relationship_HasValueIn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasValueIn",
 	params => \@args,
     });
@@ -48006,7 +47965,7 @@ sub get_relationship_HasVariationIn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasVariationIn",
 	params => \@args,
     });
@@ -48134,7 +48093,7 @@ sub get_relationship_IsVariedIn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsVariedIn",
 	params => \@args,
     });
@@ -48285,7 +48244,7 @@ sub get_relationship_Impacts
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_Impacts",
 	params => \@args,
     });
@@ -48413,7 +48372,7 @@ sub get_relationship_IsImpactedBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsImpactedBy",
 	params => \@args,
     });
@@ -48545,7 +48504,7 @@ sub get_relationship_ImplementsReaction
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_ImplementsReaction",
 	params => \@args,
     });
@@ -48669,7 +48628,7 @@ sub get_relationship_ImplementedBasedOn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_ImplementedBasedOn",
 	params => \@args,
     });
@@ -48826,7 +48785,7 @@ sub get_relationship_Includes
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_Includes",
 	params => \@args,
     });
@@ -48960,7 +48919,7 @@ sub get_relationship_IsIncludedIn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsIncludedIn",
 	params => \@args,
     });
@@ -49121,7 +49080,7 @@ sub get_relationship_IncludesAdditionalCompounds
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IncludesAdditionalCompounds",
 	params => \@args,
     });
@@ -49265,7 +49224,7 @@ sub get_relationship_IncludedIn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IncludedIn",
 	params => \@args,
     });
@@ -49419,7 +49378,7 @@ sub get_relationship_IncludesAlignmentRow
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IncludesAlignmentRow",
 	params => \@args,
     });
@@ -49565,7 +49524,7 @@ sub get_relationship_IsAlignmentRowIn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsAlignmentRowIn",
 	params => \@args,
     });
@@ -49695,7 +49654,7 @@ sub get_relationship_IncludesPart
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IncludesPart",
 	params => \@args,
     });
@@ -49817,7 +49776,7 @@ sub get_relationship_IsPartOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsPartOf",
 	params => \@args,
     });
@@ -49953,7 +49912,7 @@ sub get_relationship_IndicatedLevelsFor
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IndicatedLevelsFor",
 	params => \@args,
     });
@@ -50077,7 +50036,7 @@ sub get_relationship_HasLevelsFrom
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasLevelsFrom",
 	params => \@args,
     });
@@ -50227,7 +50186,7 @@ sub get_relationship_Involves
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_Involves",
 	params => \@args,
     });
@@ -50361,7 +50320,7 @@ sub get_relationship_IsInvolvedIn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsInvolvedIn",
 	params => \@args,
     });
@@ -50496,7 +50455,7 @@ sub get_relationship_IsAnnotatedBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsAnnotatedBy",
 	params => \@args,
     });
@@ -50622,7 +50581,7 @@ sub get_relationship_Annotates
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_Annotates",
 	params => \@args,
     });
@@ -50752,7 +50711,7 @@ sub get_relationship_IsAssayOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsAssayOf",
 	params => \@args,
     });
@@ -50874,7 +50833,7 @@ sub get_relationship_IsAssayedBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsAssayedBy",
 	params => \@args,
     });
@@ -51010,7 +50969,7 @@ sub get_relationship_IsClassFor
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsClassFor",
 	params => \@args,
     });
@@ -51136,7 +51095,7 @@ sub get_relationship_IsInClass
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsInClass",
 	params => \@args,
     });
@@ -51285,7 +51244,7 @@ sub get_relationship_IsCollectionOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsCollectionOf",
 	params => \@args,
     });
@@ -51423,7 +51382,7 @@ sub get_relationship_IsCollectedInto
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsCollectedInto",
 	params => \@args,
     });
@@ -51570,7 +51529,7 @@ sub get_relationship_IsComposedOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsComposedOf",
 	params => \@args,
     });
@@ -51708,7 +51667,7 @@ sub get_relationship_IsComponentOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsComponentOf",
 	params => \@args,
     });
@@ -51852,7 +51811,7 @@ sub get_relationship_IsComprisedOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsComprisedOf",
 	params => \@args,
     });
@@ -51984,7 +51943,7 @@ sub get_relationship_Comprises
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_Comprises",
 	params => \@args,
     });
@@ -52128,7 +52087,7 @@ sub get_relationship_IsConfiguredBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsConfiguredBy",
 	params => \@args,
     });
@@ -52264,7 +52223,7 @@ sub get_relationship_ReflectsStateOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_ReflectsStateOf",
 	params => \@args,
     });
@@ -52451,7 +52410,7 @@ sub get_relationship_IsConservedDomainModelFor
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsConservedDomainModelFor",
 	params => \@args,
     });
@@ -52589,7 +52548,7 @@ sub get_relationship_HasConservedDomainModel
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasConservedDomainModel",
 	params => \@args,
     });
@@ -52713,7 +52672,7 @@ sub get_relationship_IsConsistentWith
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsConsistentWith",
 	params => \@args,
     });
@@ -52829,7 +52788,7 @@ sub get_relationship_IsConsistentTo
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsConsistentTo",
 	params => \@args,
     });
@@ -52959,7 +52918,7 @@ sub get_relationship_IsContextOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsContextOf",
 	params => \@args,
     });
@@ -53081,7 +53040,7 @@ sub get_relationship_HasEnvironment
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasEnvironment",
 	params => \@args,
     });
@@ -53212,7 +53171,7 @@ sub get_relationship_IsCoregulatedWith
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsCoregulatedWith",
 	params => \@args,
     });
@@ -53330,7 +53289,7 @@ sub get_relationship_HasCoregulationWith
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasCoregulationWith",
 	params => \@args,
     });
@@ -53468,7 +53427,7 @@ sub get_relationship_IsCoupledTo
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsCoupledTo",
 	params => \@args,
     });
@@ -53586,7 +53545,7 @@ sub get_relationship_IsCoupledWith
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsCoupledWith",
 	params => \@args,
     });
@@ -53738,7 +53697,7 @@ sub get_relationship_IsDatasetFor
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsDatasetFor",
 	params => \@args,
     });
@@ -53882,7 +53841,7 @@ sub get_relationship_HasAssociationDataset
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasAssociationDataset",
 	params => \@args,
     });
@@ -54010,7 +53969,7 @@ sub get_relationship_IsDeterminedBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsDeterminedBy",
 	params => \@args,
     });
@@ -54124,7 +54083,7 @@ sub get_relationship_Determines
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_Determines",
 	params => \@args,
     });
@@ -54266,7 +54225,7 @@ sub get_relationship_IsDividedInto
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsDividedInto",
 	params => \@args,
     });
@@ -54400,7 +54359,7 @@ sub get_relationship_IsDivisionOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsDivisionOf",
 	params => \@args,
     });
@@ -54541,7 +54500,7 @@ sub get_relationship_IsExecutedAs
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsExecutedAs",
 	params => \@args,
     });
@@ -54675,7 +54634,7 @@ sub get_relationship_IsExecutionOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsExecutionOf",
 	params => \@args,
     });
@@ -54805,7 +54764,7 @@ sub get_relationship_IsExemplarOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsExemplarOf",
 	params => \@args,
     });
@@ -54927,7 +54886,7 @@ sub get_relationship_HasAsExemplar
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasAsExemplar",
 	params => \@args,
     });
@@ -55055,7 +55014,7 @@ sub get_relationship_IsFamilyFor
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsFamilyFor",
 	params => \@args,
     });
@@ -55175,7 +55134,7 @@ sub get_relationship_DeterminesFunctionOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_DeterminesFunctionOf",
 	params => \@args,
     });
@@ -55303,7 +55262,7 @@ sub get_relationship_IsFormedOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsFormedOf",
 	params => \@args,
     });
@@ -55423,7 +55382,7 @@ sub get_relationship_IsFormedInto
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsFormedInto",
 	params => \@args,
     });
@@ -55553,7 +55512,7 @@ sub get_relationship_IsFunctionalIn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsFunctionalIn",
 	params => \@args,
     });
@@ -55675,7 +55634,7 @@ sub get_relationship_HasFunctional
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasFunctional",
 	params => \@args,
     });
@@ -55798,7 +55757,7 @@ sub get_relationship_IsGroupFor
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsGroupFor",
 	params => \@args,
     });
@@ -55912,7 +55871,7 @@ sub get_relationship_IsInGroup
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsInGroup",
 	params => \@args,
     });
@@ -56049,7 +56008,7 @@ sub get_relationship_IsGroupingOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsGroupingOf",
 	params => \@args,
     });
@@ -56177,7 +56136,7 @@ sub get_relationship_InAssociationDataset
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_InAssociationDataset",
 	params => \@args,
     });
@@ -56308,7 +56267,7 @@ sub get_relationship_IsImplementedBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsImplementedBy",
 	params => \@args,
     });
@@ -56430,7 +56389,7 @@ sub get_relationship_Implements
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_Implements",
 	params => \@args,
     });
@@ -56561,7 +56520,7 @@ sub get_relationship_IsInOperon
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsInOperon",
 	params => \@args,
     });
@@ -56683,7 +56642,7 @@ sub get_relationship_OperonContains
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_OperonContains",
 	params => \@args,
     });
@@ -56813,7 +56772,7 @@ sub get_relationship_IsInPair
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsInPair",
 	params => \@args,
     });
@@ -56933,7 +56892,7 @@ sub get_relationship_IsPairOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsPairOf",
 	params => \@args,
     });
@@ -57067,7 +57026,7 @@ sub get_relationship_IsInstantiatedBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsInstantiatedBy",
 	params => \@args,
     });
@@ -57193,7 +57152,7 @@ sub get_relationship_IsInstanceOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsInstanceOf",
 	params => \@args,
     });
@@ -57356,7 +57315,7 @@ sub get_relationship_IsLocatedIn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsLocatedIn",
 	params => \@args,
     });
@@ -57486,7 +57445,7 @@ sub get_relationship_IsLocusFor
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsLocusFor",
 	params => \@args,
     });
@@ -57626,7 +57585,7 @@ sub get_relationship_IsMeasurementMethodOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsMeasurementMethodOf",
 	params => \@args,
     });
@@ -57758,7 +57717,7 @@ sub get_relationship_WasMeasuredBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_WasMeasuredBy",
 	params => \@args,
     });
@@ -57918,7 +57877,7 @@ sub get_relationship_IsModeledBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsModeledBy",
 	params => \@args,
     });
@@ -58070,7 +58029,7 @@ sub get_relationship_Models
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_Models",
 	params => \@args,
     });
@@ -58215,7 +58174,7 @@ sub get_relationship_IsModifiedToBuildAlignment
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsModifiedToBuildAlignment",
 	params => \@args,
     });
@@ -58345,7 +58304,7 @@ sub get_relationship_IsModificationOfAlignment
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsModificationOfAlignment",
 	params => \@args,
     });
@@ -58486,7 +58445,7 @@ sub get_relationship_IsModifiedToBuildTree
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsModifiedToBuildTree",
 	params => \@args,
     });
@@ -58612,7 +58571,7 @@ sub get_relationship_IsModificationOfTree
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsModificationOfTree",
 	params => \@args,
     });
@@ -58769,7 +58728,7 @@ sub get_relationship_IsOwnerOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsOwnerOf",
 	params => \@args,
     });
@@ -58915,7 +58874,7 @@ sub get_relationship_IsOwnedBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsOwnedBy",
 	params => \@args,
     });
@@ -59041,7 +59000,7 @@ sub get_relationship_IsParticipatingAt
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsParticipatingAt",
 	params => \@args,
     });
@@ -59159,7 +59118,7 @@ sub get_relationship_ParticipatesAt
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_ParticipatesAt",
 	params => \@args,
     });
@@ -59291,7 +59250,7 @@ sub get_relationship_IsProteinFor
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsProteinFor",
 	params => \@args,
     });
@@ -59413,7 +59372,7 @@ sub get_relationship_Produces
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_Produces",
 	params => \@args,
     });
@@ -59545,7 +59504,7 @@ sub get_relationship_IsReagentIn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsReagentIn",
 	params => \@args,
     });
@@ -59665,7 +59624,7 @@ sub get_relationship_Targets
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_Targets",
 	params => \@args,
     });
@@ -59795,7 +59754,7 @@ sub get_relationship_IsRealLocationOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsRealLocationOf",
 	params => \@args,
     });
@@ -59917,7 +59876,7 @@ sub get_relationship_HasRealLocationIn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasRealLocationIn",
 	params => \@args,
     });
@@ -60068,7 +60027,7 @@ sub get_relationship_IsReferencedBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsReferencedBy",
 	params => \@args,
     });
@@ -60210,7 +60169,7 @@ sub get_relationship_UsesReference
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_UsesReference",
 	params => \@args,
     });
@@ -60341,7 +60300,7 @@ sub get_relationship_IsRegulatedIn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsRegulatedIn",
 	params => \@args,
     });
@@ -60465,7 +60424,7 @@ sub get_relationship_IsRegulatedSetOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsRegulatedSetOf",
 	params => \@args,
     });
@@ -60592,7 +60551,7 @@ sub get_relationship_IsRegulatorFor
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsRegulatorFor",
 	params => \@args,
     });
@@ -60714,7 +60673,7 @@ sub get_relationship_HasRegulator
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasRegulator",
 	params => \@args,
     });
@@ -60841,7 +60800,7 @@ sub get_relationship_IsRegulatorForRegulon
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsRegulatorForRegulon",
 	params => \@args,
     });
@@ -60963,7 +60922,7 @@ sub get_relationship_ReglonHasRegulator
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_ReglonHasRegulator",
 	params => \@args,
     });
@@ -61088,7 +61047,7 @@ sub get_relationship_IsRegulatorySiteFor
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsRegulatorySiteFor",
 	params => \@args,
     });
@@ -61208,7 +61167,7 @@ sub get_relationship_HasRegulatorySite
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasRegulatorySite",
 	params => \@args,
     });
@@ -61347,7 +61306,7 @@ sub get_relationship_IsRelevantFor
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsRelevantFor",
 	params => \@args,
     });
@@ -61477,7 +61436,7 @@ sub get_relationship_IsRelevantTo
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsRelevantTo",
 	params => \@args,
     });
@@ -61609,7 +61568,7 @@ sub get_relationship_IsRepresentedBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsRepresentedBy",
 	params => \@args,
     });
@@ -61733,7 +61692,7 @@ sub get_relationship_DefinedBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_DefinedBy",
 	params => \@args,
     });
@@ -61855,7 +61814,7 @@ sub get_relationship_IsRoleOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsRoleOf",
 	params => \@args,
     });
@@ -61967,7 +61926,7 @@ sub get_relationship_HasRole
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasRole",
 	params => \@args,
     });
@@ -62089,7 +62048,7 @@ sub get_relationship_IsRowOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsRowOf",
 	params => \@args,
     });
@@ -62203,7 +62162,7 @@ sub get_relationship_IsRoleFor
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsRoleFor",
 	params => \@args,
     });
@@ -62327,7 +62286,7 @@ sub get_relationship_IsSequenceOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsSequenceOf",
 	params => \@args,
     });
@@ -62441,7 +62400,7 @@ sub get_relationship_HasAsSequence
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasAsSequence",
 	params => \@args,
     });
@@ -62570,7 +62529,7 @@ sub get_relationship_IsSourceForAssociationDataset
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsSourceForAssociationDataset",
 	params => \@args,
     });
@@ -62694,7 +62653,7 @@ sub get_relationship_AssociationDatasetSourcedBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_AssociationDatasetSourcedBy",
 	params => \@args,
     });
@@ -62831,7 +62790,7 @@ sub get_relationship_IsSubInstanceOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsSubInstanceOf",
 	params => \@args,
     });
@@ -62959,7 +62918,7 @@ sub get_relationship_Validates
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_Validates",
 	params => \@args,
     });
@@ -63099,7 +63058,7 @@ sub get_relationship_IsSummarizedBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsSummarizedBy",
 	params => \@args,
     });
@@ -63227,7 +63186,7 @@ sub get_relationship_Summarizes
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_Summarizes",
 	params => \@args,
     });
@@ -63341,7 +63300,7 @@ sub get_relationship_IsSuperclassOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsSuperclassOf",
 	params => \@args,
     });
@@ -63447,7 +63406,7 @@ sub get_relationship_IsSubclassOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsSubclassOf",
 	params => \@args,
     });
@@ -63601,7 +63560,7 @@ sub get_relationship_IsTaxonomyOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsTaxonomyOf",
 	params => \@args,
     });
@@ -63745,7 +63704,7 @@ sub get_relationship_IsInTaxa
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsInTaxa",
 	params => \@args,
     });
@@ -63895,7 +63854,7 @@ sub get_relationship_IsTerminusFor
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsTerminusFor",
 	params => \@args,
     });
@@ -64029,7 +63988,7 @@ sub get_relationship_HasAsTerminus
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasAsTerminus",
 	params => \@args,
     });
@@ -64172,7 +64131,7 @@ sub get_relationship_IsTriggeredBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsTriggeredBy",
 	params => \@args,
     });
@@ -64296,7 +64255,7 @@ sub get_relationship_Triggers
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_Triggers",
 	params => \@args,
     });
@@ -64450,7 +64409,7 @@ sub get_relationship_IsUsedToBuildTree
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsUsedToBuildTree",
 	params => \@args,
     });
@@ -64596,7 +64555,7 @@ sub get_relationship_IsBuiltFromAlignment
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsBuiltFromAlignment",
 	params => \@args,
     });
@@ -64746,7 +64705,7 @@ sub get_relationship_Manages
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_Manages",
 	params => \@args,
     });
@@ -64888,7 +64847,7 @@ sub get_relationship_IsManagedBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsManagedBy",
 	params => \@args,
     });
@@ -65017,7 +64976,7 @@ sub get_relationship_OntologyForSample
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_OntologyForSample",
 	params => \@args,
     });
@@ -65139,7 +65098,7 @@ sub get_relationship_SampleHasOntology
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_SampleHasOntology",
 	params => \@args,
     });
@@ -65269,7 +65228,7 @@ sub get_relationship_OperatesIn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_OperatesIn",
 	params => \@args,
     });
@@ -65391,7 +65350,7 @@ sub get_relationship_IsUtilizedIn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsUtilizedIn",
 	params => \@args,
     });
@@ -65532,7 +65491,7 @@ sub get_relationship_OrdersExperimentalUnit
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_OrdersExperimentalUnit",
 	params => \@args,
     });
@@ -65656,7 +65615,7 @@ sub get_relationship_IsTimepointOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsTimepointOf",
 	params => \@args,
     });
@@ -65782,7 +65741,7 @@ sub get_relationship_Overlaps
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_Overlaps",
 	params => \@args,
     });
@@ -65898,7 +65857,7 @@ sub get_relationship_IncludesPartOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IncludesPartOf",
 	params => \@args,
     });
@@ -66036,7 +65995,7 @@ sub get_relationship_ParticipatesAs
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_ParticipatesAs",
 	params => \@args,
     });
@@ -66166,7 +66125,7 @@ sub get_relationship_IsParticipationOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsParticipationOf",
 	params => \@args,
     });
@@ -66310,7 +66269,7 @@ sub get_relationship_PerformedExperiment
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_PerformedExperiment",
 	params => \@args,
     });
@@ -66442,7 +66401,7 @@ sub get_relationship_PerformedBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_PerformedBy",
 	params => \@args,
     });
@@ -66574,7 +66533,7 @@ sub get_relationship_PersonAnnotatedSample
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_PersonAnnotatedSample",
 	params => \@args,
     });
@@ -66698,7 +66657,7 @@ sub get_relationship_SampleAnnotatedBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_SampleAnnotatedBy",
 	params => \@args,
     });
@@ -66849,7 +66808,7 @@ sub get_relationship_PlatformWithSamples
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_PlatformWithSamples",
 	params => \@args,
     });
@@ -66993,7 +66952,7 @@ sub get_relationship_SampleRunOnPlatform
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_SampleRunOnPlatform",
 	params => \@args,
     });
@@ -67138,7 +67097,7 @@ sub get_relationship_ProducedResultsFor
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_ProducedResultsFor",
 	params => \@args,
     });
@@ -67274,7 +67233,7 @@ sub get_relationship_HadResultsProducedBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HadResultsProducedBy",
 	params => \@args,
     });
@@ -67421,7 +67380,7 @@ sub get_relationship_ProtocolForSample
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_ProtocolForSample",
 	params => \@args,
     });
@@ -67561,7 +67520,7 @@ sub get_relationship_SampleUsesProtocol
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_SampleUsesProtocol",
 	params => \@args,
     });
@@ -67701,7 +67660,7 @@ sub get_relationship_Provided
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_Provided",
 	params => \@args,
     });
@@ -67833,7 +67792,7 @@ sub get_relationship_WasProvidedBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_WasProvidedBy",
 	params => \@args,
     });
@@ -67967,7 +67926,7 @@ sub get_relationship_PublishedAssociation
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_PublishedAssociation",
 	params => \@args,
     });
@@ -68093,7 +68052,7 @@ sub get_relationship_AssociationPublishedIn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_AssociationPublishedIn",
 	params => \@args,
     });
@@ -68227,7 +68186,7 @@ sub get_relationship_PublishedExperiment
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_PublishedExperiment",
 	params => \@args,
     });
@@ -68353,7 +68312,7 @@ sub get_relationship_ExperimentPublishedIn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_ExperimentPublishedIn",
 	params => \@args,
     });
@@ -68483,7 +68442,7 @@ sub get_relationship_PublishedProtocol
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_PublishedProtocol",
 	params => \@args,
     });
@@ -68605,7 +68564,7 @@ sub get_relationship_ProtocolPublishedIn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_ProtocolPublishedIn",
 	params => \@args,
     });
@@ -68724,7 +68683,7 @@ sub get_relationship_RegulogHasRegulon
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_RegulogHasRegulon",
 	params => \@args,
     });
@@ -68838,7 +68797,7 @@ sub get_relationship_RegulonIsInRegolog
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_RegulonIsInRegolog",
 	params => \@args,
     });
@@ -68983,7 +68942,7 @@ sub get_relationship_RegulomeHasGenome
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_RegulomeHasGenome",
 	params => \@args,
     });
@@ -69123,7 +69082,7 @@ sub get_relationship_GenomeIsInRegulome
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_GenomeIsInRegulome",
 	params => \@args,
     });
@@ -69244,7 +69203,7 @@ sub get_relationship_RegulomeHasRegulon
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_RegulomeHasRegulon",
 	params => \@args,
     });
@@ -69360,7 +69319,7 @@ sub get_relationship_RegulonIsInRegolome
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_RegulonIsInRegolome",
 	params => \@args,
     });
@@ -69485,7 +69444,7 @@ sub get_relationship_RegulomeSource
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_RegulomeSource",
 	params => \@args,
     });
@@ -69605,7 +69564,7 @@ sub get_relationship_CreatedRegulome
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_CreatedRegulome",
 	params => \@args,
     });
@@ -69722,7 +69681,7 @@ sub get_relationship_RegulonHasOperon
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_RegulonHasOperon",
 	params => \@args,
     });
@@ -69834,7 +69793,7 @@ sub get_relationship_OperonIsInRegulon
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_OperonIsInRegulon",
 	params => \@args,
     });
@@ -69971,7 +69930,7 @@ sub get_relationship_SampleAveragedFrom
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_SampleAveragedFrom",
 	params => \@args,
     });
@@ -70101,7 +70060,7 @@ sub get_relationship_SampleComponentOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_SampleComponentOf",
 	params => \@args,
     });
@@ -70252,7 +70211,7 @@ sub get_relationship_SampleContactPerson
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_SampleContactPerson",
 	params => \@args,
     });
@@ -70396,7 +70355,7 @@ sub get_relationship_PersonPerformedSample
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_PersonPerformedSample",
 	params => \@args,
     });
@@ -70541,7 +70500,7 @@ sub get_relationship_SampleHasAnnotations
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_SampleHasAnnotations",
 	params => \@args,
     });
@@ -70679,7 +70638,7 @@ sub get_relationship_AnnotationsForSample
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_AnnotationsForSample",
 	params => \@args,
     });
@@ -70834,7 +70793,7 @@ sub get_relationship_SampleInSeries
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_SampleInSeries",
 	params => \@args,
     });
@@ -70982,7 +70941,7 @@ sub get_relationship_SeriesWithSamples
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_SeriesWithSamples",
 	params => \@args,
     });
@@ -71140,7 +71099,7 @@ sub get_relationship_SampleMeasurements
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_SampleMeasurements",
 	params => \@args,
     });
@@ -71290,7 +71249,7 @@ sub get_relationship_MeasurementInSample
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_MeasurementInSample",
 	params => \@args,
     });
@@ -71431,7 +71390,7 @@ sub get_relationship_SamplesInReplicateGroup
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_SamplesInReplicateGroup",
 	params => \@args,
     });
@@ -71565,7 +71524,7 @@ sub get_relationship_ReplicateGroupsForSample
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_ReplicateGroupsForSample",
 	params => \@args,
     });
@@ -71702,7 +71661,7 @@ sub get_relationship_SeriesPublishedIn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_SeriesPublishedIn",
 	params => \@args,
     });
@@ -71832,7 +71791,7 @@ sub get_relationship_PublicationsForSeries
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_PublicationsForSeries",
 	params => \@args,
     });
@@ -71983,7 +71942,7 @@ sub get_relationship_Shows
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_Shows",
 	params => \@args,
     });
@@ -72121,7 +72080,7 @@ sub get_relationship_IsShownOn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsShownOn",
 	params => \@args,
     });
@@ -72247,7 +72206,7 @@ sub get_relationship_StrainParentOf
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_StrainParentOf",
 	params => \@args,
     });
@@ -72365,7 +72324,7 @@ sub get_relationship_DerivedFromStrain
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_DerivedFromStrain",
 	params => \@args,
     });
@@ -72504,7 +72463,7 @@ sub get_relationship_StrainWithPlatforms
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_StrainWithPlatforms",
 	params => \@args,
     });
@@ -72636,7 +72595,7 @@ sub get_relationship_PlatformForStrain
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_PlatformForStrain",
 	params => \@args,
     });
@@ -72789,7 +72748,7 @@ sub get_relationship_StrainWithSample
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_StrainWithSample",
 	params => \@args,
     });
@@ -72935,7 +72894,7 @@ sub get_relationship_SampleForStrain
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_SampleForStrain",
 	params => \@args,
     });
@@ -73085,7 +73044,7 @@ sub get_relationship_Submitted
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_Submitted",
 	params => \@args,
     });
@@ -73227,7 +73186,7 @@ sub get_relationship_WasSubmittedBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_WasSubmittedBy",
 	params => \@args,
     });
@@ -73367,7 +73326,7 @@ sub get_relationship_SupersedesAlignment
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_SupersedesAlignment",
 	params => \@args,
     });
@@ -73495,7 +73454,7 @@ sub get_relationship_IsSupersededByAlignment
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsSupersededByAlignment",
 	params => \@args,
     });
@@ -73631,7 +73590,7 @@ sub get_relationship_SupersedesTree
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_SupersedesTree",
 	params => \@args,
     });
@@ -73755,7 +73714,7 @@ sub get_relationship_IsSupersededByTree
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsSupersededByTree",
 	params => \@args,
     });
@@ -73895,7 +73854,7 @@ sub get_relationship_Treed
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_Treed",
 	params => \@args,
     });
@@ -74027,7 +73986,7 @@ sub get_relationship_IsTreeFrom
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsTreeFrom",
 	params => \@args,
     });
@@ -74165,7 +74124,7 @@ sub get_relationship_UsedIn
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_UsedIn",
 	params => \@args,
     });
@@ -74295,7 +74254,7 @@ sub get_relationship_HasMedia
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_HasMedia",
 	params => \@args,
     });
@@ -74444,7 +74403,7 @@ sub get_relationship_Uses
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_Uses",
 	params => \@args,
     });
@@ -74584,7 +74543,7 @@ sub get_relationship_IsUsedBy
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_IsUsedBy",
 	params => \@args,
     });
@@ -74736,7 +74695,7 @@ sub get_relationship_UsesCodons
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_UsesCodons",
 	params => \@args,
     });
@@ -74880,7 +74839,7 @@ sub get_relationship_AreCodonsFor
 	}
     }
 
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
 	method => "CDMI_EntityAPI.get_relationship_AreCodonsFor",
 	params => \@args,
     });
@@ -74906,7 +74865,7 @@ sub get_relationship_AreCodonsFor
 
 sub version {
     my ($self) = @_;
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+    my $result = $self->{client}->call($self->{url}, {
         method => "CDMI_EntityAPI.version",
         params => [],
     });
@@ -87068,28 +87027,22 @@ to_link has a value which is a string
 =cut
 
 package Bio::KBase::CDMI::Client::RpcClient;
-use base 'JSON::RPC::Legacy::Client';
-use POSIX;
-use strict;
+use base 'JSON::RPC::Client';
 
 #
 # Override JSON::RPC::Client::call because it doesn't handle error returns properly.
 #
 
 sub call {
-    my ($self, $uri, $headers, $obj) = @_;
+    my ($self, $uri, $obj) = @_;
     my $result;
 
-
-    {
-	if ($uri =~ /\?/) {
-	    $result = $self->_get($uri);
-	}
-	else {
-	    Carp::croak "not hashref." unless (ref $obj eq 'HASH');
-	    $result = $self->_post($uri, $headers, $obj);
-	}
-
+    if ($uri =~ /\?/) {
+       $result = $self->_get($uri);
+    }
+    else {
+        Carp::croak "not hashref." unless (ref $obj eq 'HASH');
+        $result = $self->_post($uri, $obj);
     }
 
     my $service = $obj->{method} =~ /^system\./ if ( $obj );
@@ -87104,11 +87057,11 @@ sub call {
             return JSON::RPC::ServiceObject->new($result, $self->json);
         }
 
-        return JSON::RPC::Legacy::ReturnObject->new($result, $self->json);
+        return JSON::RPC::ReturnObject->new($result, $self->json);
     }
     elsif ($result->content_type eq 'application/json')
     {
-        return JSON::RPC::Legacy::ReturnObject->new($result, $self->json);
+        return JSON::RPC::ReturnObject->new($result, $self->json);
     }
     else {
         return;
@@ -87117,7 +87070,7 @@ sub call {
 
 
 sub _post {
-    my ($self, $uri, $headers, $obj) = @_;
+    my ($self, $uri, $obj) = @_;
     my $json = $self->json;
 
     $obj->{version} ||= $self->{version} || '1.1';
@@ -87128,7 +87081,7 @@ sub _post {
             $self->id($obj->{id}) if ($obj->{id}); # if undef, it is notification.
         }
         else {
-            $obj->{id} = $self->id || ($self->id('JSON::RPC::Legacy::Client'));
+            $obj->{id} = $self->id || ($self->id('JSON::RPC::Client'));
         }
     }
     else {
@@ -87144,7 +87097,6 @@ sub _post {
         Content_Type   => $self->{content_type},
         Content        => $content,
         Accept         => 'application/json',
-	@$headers,
 	($self->{token} ? (Authorization => $self->{token}) : ()),
     );
 }
